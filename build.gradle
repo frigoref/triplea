@@ -2,7 +2,7 @@ plugins {
     id 'java'
     id 'com.github.ben-manes.versions' version '0.42.0'
     id 'io.franzbecker.gradle-lombok' version '5.0.0' apply false
-    id 'com.diffplug.spotless' version '6.2.2' apply false
+    id 'com.diffplug.spotless' version '6.3.0' apply false
 }
 
 apply from: 'gradle/scripts/yaml.gradle'
@@ -97,9 +97,9 @@ subprojects {
         logbackClassicVersion = '1.2.10'
         mockitoVersion = '4.3.1'
         openFeignVersion = '11.8'
-        postgresqlVersion = '42.3.2'
+        postgresqlVersion = '42.3.3'
         snakeYamlVersion = '2.3'
-        sonatypeGoodiesPrefsVersion = '2.3.2-01'
+        sonatypeGoodiesPrefsVersion = '2.3.3'
         substanceVersion = '4.5.0'
         wireMockJunit5Version = '1.3.1'
         wireMockVersion = '2.27.2'
