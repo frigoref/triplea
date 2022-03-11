@@ -2286,7 +2286,7 @@
 - mapName: Global 40 expansion
   mapCategory: EXPERIMENTAL
   url: https://github.com/triplea-maps/global_40_expansion/archive/master.zip
-  version: 5
+  version: 6
   img: https://raw.githubusercontent.com/triplea-maps/global_40_house_rules/master/preview.png
   description: |
     <br>
@@ -2488,3 +2488,45 @@
   img: https://raw.githubusercontent.com/triplea-maps/CTF2/master/preview.png
   description: |
    <br>A variety of scenarios using the Capture the Flag Map
+- mapName: Oil Wars
+  mapCategory: EXPERIMENTAL
+  url: https://github.com/triplea-maps/Oil_Wars/archive/master.zip
+  version: 1
+  img: https://raw.githubusercontent.com/triplea-maps/Oil_Wars/master/preview.png
+  description: |
+   <br>An alternate history scenario in a world critically short of oil. Income is concentrated in oil-producing regions
+- mapName: Game of Thrones V2
+  mapCategory: EXPERIMENTAL
+  url: https://github.com/triplea-maps/game_of_thrones_v2/archive/master.zip
+  version: 1
+  img: https://raw.githubusercontent.com/triplea-maps/game_of_thrones_v2/master/preview.png
+  description: |
+   <br>The Game of Thrones with triggers to reflect the shifting alliances. Triggers are not fully implemented
+- mapName: D-Day 3
+  mapCategory: EXPERIMENTAL
+  url: https://github.com/triplea-maps/D-Day_3/archive/master.zip
+  version: 1
+  img: https://raw.githubusercontent.com/triplea-maps/D-Day_3/master/preview.png
+  description: |
+   <br>Based upon the Axis & Allies D-Day game, this mod is designed for maximum compatibility with the AI
+- mapName: Hearts of Iron 2
+  mapCategory: EXPERIMENTAL
+  url: https://github.com/triplea-maps/Hearts_of_Iron2/archive/master.zip
+  version: 1
+  img: https://raw.githubusercontent.com/triplea-maps/Hearts_of_Iron2/master/preview.png
+  description: |
+   <br>4 WW2 Scenarios on large map with many unit types
+- mapName: China vs Russia
+  mapCategory: EXPERIMENTAL
+  url: https://github.com/triplea-maps/China_vs_Russia/archive/master.zip
+  version: 1
+  img: https://raw.githubusercontent.com/triplea-maps/China_vs_Russia/master/preview.png
+  description: |
+   <br>A hypothetical Chinese-Russian conflict on the World War II Pacific map
+- mapName: Feudal Lords
+  mapCategory: EXPERIMENTAL
+  url: https://github.com/triplea-maps/feudal_lords/archive/master.zip
+  version: 1
+  img: https://raw.githubusercontent.com/triplea-maps/feudal_lords/master/preview.png
+  description: |
+   <br>Free for all in Medieval Europe and the Mediterranean
