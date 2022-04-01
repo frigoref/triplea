@@ -91,7 +91,7 @@ to help.
 
 #### _Skillset_
 
-- tbd
+- To Be Determined
 
 #### _Contributions_
 
