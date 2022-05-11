@@ -192,4 +192,4 @@ to help.
 
 #### _How to become one_
 
-- tbd
+- Have a Developer with Write Access add you as a Developer with Merge Rights
