@@ -74,7 +74,7 @@ public class GameMap extends GameDataComponent implements Iterable<Territory> {
 
   private void setConnection(final Territory from, final Territory to) {
     // preserves the unmodifiable nature of the entries
-    final Set<Territory> current = connections.get(from);
+    final Set<Territory> current = getNeighbors(from);
     final Set<Territory> modified = new HashSet<>(current);
     modified.add(to);
     connections.put(from, Collections.unmodifiableSet(modified));
@@ -115,8 +115,7 @@ public class GameMap extends GameDataComponent implements Iterable<Territory> {
 
   private Set<Territory> getNeighbors(
       final Territory territory, final BiPredicate<Territory, Territory> routeCondition) {
-
-    return connections.getOrDefault(territory, Set.of()).parallelStream()
+    return getNeighbors(territory).stream()
         .filter(n -> routeCondition.test(territory, n))
         .collect(Collectors.toSet());
   }
@@ -266,10 +265,8 @@ public class GameMap extends GameDataComponent implements Iterable<Territory> {
    */
   public Set<Territory> getNeighborsByMovementCost(
       final Territory territory,
-      final Unit unit,
       final BigDecimal movementLeft,
       final Predicate<Territory> territoryCondition) {
-    checkNotNull(unit);
     checkArgument(
         movementLeft.compareTo(BigDecimal.ZERO) >= 0,
         "MovementLeft must be non-negative: " + movementLeft);
@@ -399,7 +396,7 @@ public class GameMap extends GameDataComponent implements Iterable<Territory> {
 
     final Set<Territory> newFrontier =
         frontier.stream()
-            .flatMap(f -> connections.get(f).stream().filter(t -> routeCond.test(f, t)))
+            .flatMap(f -> getNeighbors(f, routeCond).stream())
             .collect(Collectors.toSet());
     if (newFrontier.contains(target)) {
       return distance + 1;
@@ -469,7 +466,7 @@ public class GameMap extends GameDataComponent implements Iterable<Territory> {
 
   public List<Territory> getTerritoriesOwnedBy(final GamePlayer player) {
     return territories.stream()
-        .filter(t -> t.getOwner().equals(player))
+        .filter(Matches.isTerritoryOwnedBy(player))
         .collect(Collectors.toList());
   }
 

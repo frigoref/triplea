@@ -102,9 +102,13 @@ class ProNonCombatMoveAi {
     final List<ProTerritory> prioritizedTerritories = prioritizeDefendOptions(factoryMoveMap);
 
     // Determine which territories to defend and how many units each one needs
-    final int enemyDistance =
-        ProUtils.getClosestEnemyLandTerritoryDistance(data, player, proData.getMyCapital());
-    moveUnitsToDefendTerritories(prioritizedTerritories, enemyDistance);
+    final Territory myCapital = proData.getMyCapital();
+    int enemyDistanceToMyCapital = Integer.MAX_VALUE;
+    if (myCapital != null) {
+      enemyDistanceToMyCapital =
+          ProUtils.getClosestEnemyLandTerritoryDistance(data, player, myCapital);
+      moveUnitsToDefendTerritories(prioritizedTerritories, enemyDistanceToMyCapital);
+    }
 
     // Copy data in case capital defense needs increased
     final ProTerritoryManager territoryManagerCopy =
@@ -124,7 +128,6 @@ class ProNonCombatMoveAi {
             player, territoriesThatCantBeHeld, territoryManager.getDefendTerritories());
 
     // Use loop to ensure capital is protected after moves
-    final Territory myCapital = proData.getMyCapital();
     if (myCapital != null) {
       int defenseRange = -1;
       while (true) {
@@ -153,17 +156,18 @@ class ProNonCombatMoveAi {
 
         // Check if capital has local land superiority
         ProLogger.info(
-            "Checking if capital has local land superiority with enemyDistance=" + enemyDistance);
-        if (enemyDistance >= 2
-            && enemyDistance <= 3
+            "Checking if capital has local land superiority with enemyDistanceToMyCapital="
+                + enemyDistanceToMyCapital);
+        if (enemyDistanceToMyCapital >= 2
+            && enemyDistanceToMyCapital <= 3
             && defenseRange == -1
             && !ProBattleUtils.territoryHasLocalLandSuperiorityAfterMoves(
                 proData,
                 myCapital,
-                enemyDistance,
+                enemyDistanceToMyCapital,
                 player,
                 territoryManager.getDefendOptions().getTerritoryMap())) {
-          defenseRange = enemyDistance - 1;
+          defenseRange = enemyDistanceToMyCapital - 1;
           territoryManager = territoryManagerCopy;
           ProLogger.debug(
               "Capital doesn't have local land superiority so setting defensive stance");
@@ -250,7 +254,7 @@ class ProNonCombatMoveAi {
     for (final Iterator<Unit> it = unitMoveMap.keySet().iterator(); it.hasNext(); ) {
       final Unit u = it.next();
       if (unitMoveMap.get(u).size() == 1) {
-        final Territory onlyTerritory = unitMoveMap.get(u).iterator().next();
+        final Territory onlyTerritory = CollectionUtils.getAny(unitMoveMap.get(u));
         if (onlyTerritory.equals(unitTerritoryMap.get(u))) {
           boolean canBeTransported = false;
           for (final ProTransport pad : transportMapList) {
@@ -881,7 +885,7 @@ class ProNonCombatMoveAi {
             continue; // skip moving air to water if not enough carrier capacity
           }
           if (!t.isWater()
-              && !t.getOwner().equals(player)
+              && !t.isOwnedBy(player)
               && Matches.unitIsAir().test(unit)
               && !ProMatches.territoryHasInfraFactoryAndIsLand().test(t)) {
             continue; // skip moving air units to allied land without a factory
@@ -1666,7 +1670,7 @@ class ProNonCombatMoveAi {
                         ProMatches.territoryCanMoveLandUnitsAndIsAllied(data, player));
             if (!possibleUnloadTerritories.isEmpty()) {
               // Find best unload territory
-              Territory unloadToTerritory = possibleUnloadTerritories.iterator().next();
+              Territory unloadToTerritory = CollectionUtils.getAny(possibleUnloadTerritories);
               for (final Territory t : possibleUnloadTerritories) {
                 if (moveMap.get(t) != null && moveMap.get(t).isCanHold()) {
                   unloadToTerritory = t;

@@ -661,7 +661,7 @@ public final class GameParser {
       }
       if (result == null) {
         throw new GameParseException(
-            "Could not find resource or unit" + current.getResourceOrUnit());
+            "Could not find resource or unit " + current.getResourceOrUnit());
       }
       final int quantity = Optional.ofNullable(current.getQuantity()).orElse(0);
       rule.addResult(result, quantity);
@@ -682,7 +682,7 @@ public final class GameParser {
       }
       if (result == null) {
         throw new GameParseException(
-            "Could not find resource or unit" + current.getResourceOrUnit());
+            "Could not find resource or unit " + current.getResourceOrUnit());
       }
       final int quantity = Optional.ofNullable(current.getQuantity()).orElse(0);
       rule.addResult(result, quantity);
@@ -879,7 +879,8 @@ public final class GameParser {
                 () ->
                     new GameParseException(
                         "Attachment of type " + className + " could not be instantiated"));
-    attachable.addAttachment(name, attachment);
+    // replace-all to automatically correct legacy (1.8) attachment spelling
+    attachable.addAttachment(name.replaceAll("ttatchment", "ttachment"), attachment);
 
     final List<Tuple<String, String>> attachmentOptionValues =
         setOptions(attachment, current.getOptions(), foreach, variables);

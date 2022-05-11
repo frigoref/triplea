@@ -49,8 +49,7 @@ public class PurchaseDelegate extends BaseTripleADelegate
     implements IPurchaseDelegate, IAbstractForumPosterDelegate {
   public static final String NOT_ENOUGH_RESOURCES = "Not enough resources";
   private static final Comparator<RepairRule> repairRuleComparator =
-      Comparator.comparing(
-          o -> (UnitType) o.getResults().keySet().iterator().next(), new UnitTypeComparator());
+      Comparator.comparing(o -> (UnitType) o.getAnyResultKey(), new UnitTypeComparator());
 
   private boolean needToInitialize = true;
 
@@ -123,12 +122,6 @@ public class PurchaseDelegate extends BaseTripleADelegate
 
   @Override
   public boolean delegateCurrentlyRequiresUserInput() {
-    if ((player.getProductionFrontier() == null
-            || player.getProductionFrontier().getRules().isEmpty())
-        && (player.getRepairFrontier() == null
-            || player.getRepairFrontier().getRules().isEmpty())) {
-      return false;
-    }
     if (!canWePurchaseOrRepair()) {
       return false;
     }

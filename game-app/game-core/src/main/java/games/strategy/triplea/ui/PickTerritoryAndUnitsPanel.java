@@ -18,7 +18,6 @@ import javax.annotation.Nullable;
 import javax.swing.AbstractAction;
 import javax.swing.Action;
 import javax.swing.JButton;
-import javax.swing.JLabel;
 import javax.swing.JOptionPane;
 import javax.swing.SwingUtilities;
 import lombok.extern.slf4j.Slf4j;
@@ -26,6 +25,7 @@ import org.triplea.java.collections.CollectionUtils;
 import org.triplea.swing.EventThreadJOptionPane;
 import org.triplea.swing.EventThreadJOptionPane.ConfirmDialogType;
 import org.triplea.swing.SwingAction;
+import org.triplea.swing.SwingComponents;
 import org.triplea.util.Tuple;
 
 /** For choosing territories and units for them, during RandomStartDelegate. */
@@ -33,7 +33,6 @@ import org.triplea.util.Tuple;
 public class PickTerritoryAndUnitsPanel extends ActionPanel {
   private static final long serialVersionUID = -2672163347536778594L;
   private final TripleAFrame parent;
-  private final JLabel actionLabel = new JLabel();
   private JButton doneButton = null;
   private JButton selectTerritoryButton = null;
   private JButton selectUnitsButton = null;
@@ -161,6 +160,7 @@ public class PickTerritoryAndUnitsPanel extends ActionPanel {
           doneButton = new JButton(doneAction);
           doneButton.setToolTipText(ActionButtons.DONE_BUTTON_TOOLTIP);
           add(doneButton);
+          SwingComponents.redraw(this);
           SwingUtilities.invokeLater(() -> selectTerritoryButton.requestFocusInWindow());
         });
   }
