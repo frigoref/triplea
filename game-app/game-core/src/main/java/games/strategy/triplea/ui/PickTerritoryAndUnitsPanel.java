@@ -18,14 +18,13 @@ import javax.annotation.Nullable;
 import javax.swing.AbstractAction;
 import javax.swing.Action;
 import javax.swing.JButton;
-import javax.swing.JLabel;
 import javax.swing.JOptionPane;
 import javax.swing.SwingUtilities;
 import lombok.extern.slf4j.Slf4j;
 import org.triplea.java.collections.CollectionUtils;
 import org.triplea.swing.EventThreadJOptionPane;
 import org.triplea.swing.EventThreadJOptionPane.ConfirmDialogType;
-import org.triplea.swing.SwingAction;
+import org.triplea.swing.SwingComponents;
 import org.triplea.util.Tuple;
 
 /** For choosing territories and units for them, during RandomStartDelegate. */
@@ -33,7 +32,6 @@ import org.triplea.util.Tuple;
 public class PickTerritoryAndUnitsPanel extends ActionPanel {
   private static final long serialVersionUID = -2672163347536778594L;
   private final TripleAFrame parent;
-  private final JLabel actionLabel = new JLabel();
   private JButton doneButton = null;
   private JButton selectTerritoryButton = null;
   private JButton selectUnitsButton = null;
@@ -44,8 +42,6 @@ public class PickTerritoryAndUnitsPanel extends ActionPanel {
   private int unitsPerPick = 1;
   private Action currentAction = null;
   private @Nullable Territory currentHighlightedTerritory;
-
-  private final Action doneAction = SwingAction.of("Done", this::performDone);
 
   private final Action selectUnitsAction =
       new AbstractAction("Select Units") {
@@ -88,8 +84,8 @@ public class PickTerritoryAndUnitsPanel extends ActionPanel {
             if (!territoryChoices.contains(territory)) {
               EventThreadJOptionPane.showMessageDialog(
                   parent,
-                  "Must Pick An Unowned Territory (will have a white highlight)",
-                  "Must Pick An Unowned Territory",
+                  "You must pick an unowned land territory (will have a white highlight)",
+                  "Must Pick An Unowned Land Territory",
                   JOptionPane.WARNING_MESSAGE);
               return;
             }
@@ -158,16 +154,16 @@ public class PickTerritoryAndUnitsPanel extends ActionPanel {
           add(selectTerritoryButton);
           selectUnitsButton = new JButton(selectUnitsAction);
           add(selectUnitsButton);
-          doneButton = new JButton(doneAction);
-          doneButton.setToolTipText(ActionButtons.DONE_BUTTON_TOOLTIP);
+          doneButton = createDoneButton();
           add(doneButton);
+          SwingComponents.redraw(this);
           SwingUtilities.invokeLater(() -> selectTerritoryButton.requestFocusInWindow());
         });
   }
 
   @Override
   public void performDone() {
-    currentAction = doneAction;
+    currentAction = doneButton.getAction();
     setWidgetActivation();
     if (pickedTerritory == null || !territoryChoices.contains(pickedTerritory)) {
       EventThreadJOptionPane.showMessageDialog(
@@ -263,11 +259,11 @@ public class PickTerritoryAndUnitsPanel extends ActionPanel {
         () -> {
           if (!isActive()) {
             // current turn belongs to remote player or AI player
-            doneAction.setEnabled(false);
+            doneButton.setEnabled(false);
             selectUnitsAction.setEnabled(false);
             selectTerritoryAction.setEnabled(false);
           } else {
-            doneAction.setEnabled(currentAction == null);
+            doneButton.setEnabled(currentAction == null);
             selectUnitsAction.setEnabled(currentAction == null);
             selectTerritoryAction.setEnabled(currentAction == null);
           }

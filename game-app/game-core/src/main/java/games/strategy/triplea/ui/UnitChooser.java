@@ -27,9 +27,9 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.function.Predicate;
 import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 import javax.swing.JButton;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
@@ -38,6 +38,9 @@ import javax.swing.JTextArea;
 import lombok.experimental.UtilityClass;
 import org.triplea.java.Postconditions;
 import org.triplea.java.collections.IntegerMap;
+import org.triplea.swing.jpanel.GridBagConstraintsAnchor;
+import org.triplea.swing.jpanel.GridBagConstraintsBuilder;
+import org.triplea.swing.jpanel.GridBagConstraintsFill;
 
 /**
  * Shows units to choose including the controls to make the choice. Units are grouped by owner, type
@@ -99,11 +102,11 @@ public final class UnitChooser extends JPanel {
   }
 
   private UnitChooser(
-      final Map<Unit, Collection<Unit>> dependent,
+      final @Nullable Map<Unit, Collection<Unit>> dependents,
       final boolean allowMultipleHits,
       final UiContext uiContext,
-      final Predicate<Collection<Unit>> match) {
-    dependents = dependent;
+      final @Nullable Predicate<Collection<Unit>> match) {
+    this.dependents = dependents;
     this.allowMultipleHits = allowMultipleHits;
     NonWithdrawableFactory.makeSureNonWithdrawableFactoryMatchesUiContext(uiContext);
     this.match = match;
@@ -112,19 +115,19 @@ public final class UnitChooser extends JPanel {
   UnitChooser(
       final Collection<Unit> units,
       final CasualtyList defaultSelections,
-      final Map<Unit, Collection<Unit>> dependent,
+      final @Nullable Map<Unit, Collection<Unit>> dependents,
       final boolean retreatPossibility,
       final boolean movementForAirUnitsOnly,
       final boolean allowMultipleHits,
       final UiContext uiContext) {
-    this(dependent, allowMultipleHits, uiContext, null);
+    this(dependents, allowMultipleHits, uiContext, null);
     final List<Unit> combinedList = defaultSelections.getDamaged();
     // TODO: this adds it to the default selections list, is this intended?
     combinedList.addAll(defaultSelections.getKilled());
     createEntries(
         units,
         UnitSeparator.SeparatorCategories.builder()
-            .dependents(dependent)
+            .dependents(dependents)
             .retreatPossibility(retreatPossibility)
             .movementForAirUnitsOnly(movementForAirUnitsOnly)
             .build(),
@@ -135,11 +138,11 @@ public final class UnitChooser extends JPanel {
   public UnitChooser(
       final Collection<Unit> units,
       final Collection<Unit> defaultSelections,
-      final Map<Unit, Collection<Unit>> dependent,
+      final @Nullable Map<Unit, Collection<Unit>> dependents,
       final UnitSeparator.SeparatorCategories separatorCategories,
       final boolean allowMultipleHits,
       final UiContext uiContext) {
-    this(dependent, allowMultipleHits, uiContext, null);
+    this(dependents, allowMultipleHits, uiContext, null);
     createEntries(
         units, separatorCategories.toBuilder().dependents(dependents).build(), defaultSelections);
     layoutEntries();
@@ -148,12 +151,12 @@ public final class UnitChooser extends JPanel {
   public UnitChooser(
       final Collection<Unit> units,
       final Collection<Unit> defaultSelections,
-      final Map<Unit, Collection<Unit>> dependent,
+      final @Nullable Map<Unit, Collection<Unit>> dependents,
       final UnitSeparator.SeparatorCategories separatorCategories,
       final boolean allowMultipleHits,
       final UiContext uiContext,
-      final Predicate<Collection<Unit>> match) {
-    this(dependent, allowMultipleHits, uiContext, match);
+      final @Nullable Predicate<Collection<Unit>> match) {
+    this(dependents, allowMultipleHits, uiContext, match);
     createEntries(
         units, separatorCategories.toBuilder().dependents(dependents).build(), defaultSelections);
     layoutEntries();
@@ -238,12 +241,12 @@ public final class UnitChooser extends JPanel {
                   Postconditions.assertState(
                       unit.getOwner() != null,
                       "Contract problem: All units in UnitChooser are expected to have an owner,"
-                          + " but now one appeared to how none.");
+                          + " but now one appeared to have none.");
 
                   Postconditions.assertState(
                       unit.getOwner().getData() != null,
                       "All units owners are expected to relate to a gameData object,"
-                          + "but now one appeared to how none.");
+                          + " but now one appeared to have none.");
 
                   return Properties.getPartialAmphibiousRetreat(
                           unit.getOwner().getData().getProperties())
@@ -476,9 +479,9 @@ public final class UnitChooser extends JPanel {
 
     void createComponents(final JPanel panel, final int rowIndex) {
       int gridx = 0;
-      for (int i = 0;
-          i < (hasMultipleHits ? Math.max(1, category.getHitPoints() - category.getDamaged()) : 1);
-          i++) {
+      int iterations =
+          (hasMultipleHits ? Math.max(1, category.getHitPoints() - category.getDamaged()) : 1);
+      for (int i = 0; i < iterations; i++) {
         final boolean damaged = i > 0;
         final ScrollableTextField scroll = new ScrollableTextField(0, category.getUnits().size());
         hitTexts.add(scroll);
@@ -486,83 +489,32 @@ public final class UnitChooser extends JPanel {
         scroll.addChangeListener(textFieldListener);
         final JLabel label = new JLabel("x" + category.getUnits().size());
         hitLabel.add(label);
+        final var builder =
+            new GridBagConstraintsBuilder(gridx, rowIndex)
+                .gridWidth(1)
+                .gridHeight(1)
+                .anchor(GridBagConstraintsAnchor.WEST)
+                .fill(GridBagConstraintsFill.HORIZONTAL);
         panel.add(
             new UnitChooserEntryIcon(damaged),
-            new GridBagConstraints(
-                gridx++,
-                rowIndex,
-                1,
-                1,
-                0,
-                0,
-                GridBagConstraints.WEST,
-                GridBagConstraints.HORIZONTAL,
-                new Insets(0, (i == 0 ? 0 : 8), 0, 0),
-                0,
-                0));
+            builder.insets(new Insets(0, (i == 0 ? 0 : 8), 0, 0)).gridX(gridx++).build());
         if (i == 0) {
+          // -1 indicates a transport whose movement ended due to unloading already.
           if (category.getMovement().compareTo(new BigDecimal(-1)) != 0) {
             panel.add(
                 new JLabel("mvt " + category.getMovement()),
-                new GridBagConstraints(
-                    gridx,
-                    rowIndex,
-                    1,
-                    1,
-                    0,
-                    0,
-                    GridBagConstraints.WEST,
-                    GridBagConstraints.HORIZONTAL,
-                    new Insets(0, 4, 0, 4),
-                    0,
-                    0));
+                builder.insets(new Insets(0, 4, 0, 4)).gridX(gridx).build());
           }
-          gridx++;
+          gridx++; // Increment outside the if to avoid misalignment.
           if (category.getTransportCost() != -1) {
             panel.add(
                 new JLabel("cst " + category.getTransportCost()),
-                new GridBagConstraints(
-                    gridx,
-                    rowIndex,
-                    1,
-                    1,
-                    0,
-                    0,
-                    GridBagConstraints.WEST,
-                    GridBagConstraints.HORIZONTAL,
-                    new Insets(0, 4, 0, 4),
-                    0,
-                    0));
+                builder.insets(new Insets(0, 4, 0, 4)).gridX(gridx).build());
           }
+          gridx++; // Increment outside the if to avoid misalignment.
         }
-        panel.add(
-            label,
-            new GridBagConstraints(
-                gridx++,
-                rowIndex,
-                1,
-                1,
-                0,
-                0,
-                GridBagConstraints.WEST,
-                GridBagConstraints.HORIZONTAL,
-                emptyInsets,
-                0,
-                0));
-        panel.add(
-            scroll,
-            new GridBagConstraints(
-                gridx++,
-                rowIndex,
-                1,
-                1,
-                0,
-                0,
-                GridBagConstraints.WEST,
-                GridBagConstraints.HORIZONTAL,
-                new Insets(0, 4, 0, 0),
-                0,
-                0));
+        panel.add(label, builder.insets(emptyInsets).gridX(gridx++).build());
+        panel.add(scroll, builder.insets(new Insets(0, 4, 0, 0)).gridX(gridx++).build());
         scroll.addChangeListener(field -> updateLeftToSelect());
       }
       updateLeftToSelect();
@@ -668,21 +620,22 @@ public final class UnitChooser extends JPanel {
       public void paint(final Graphics g) {
         super.paint(g);
 
-        NonWithdrawableFactory.getImage(
+        Image image =
+            NonWithdrawableFactory.getImage(
                 ImageKey.builder()
                     .type(category.getType())
                     .player(category.getOwner())
                     .damaged(damaged || category.hasDamageOrBombingUnitDamage())
                     .disabled(category.getDisabled())
                     .build(),
-                /*nonWithdrawable =*/ !category.getCanRetreat())
-            .ifPresent(image -> g.drawImage(image, 0, 0, this));
+                /*nonWithdrawable =*/ !category.getCanRetreat());
+        g.drawImage(image, 0, 0, this);
 
         int index = 1;
         for (final UnitOwner holder : category.getDependents()) {
           final int x = NonWithdrawableFactory.getUnitImageWidth() * index;
-          NonWithdrawableFactory.getImage(ImageKey.of(holder), false)
-              .ifPresent(image1 -> g.drawImage(image1, x, 0, this));
+          Image nonWithdrawableImage = NonWithdrawableFactory.getImage(ImageKey.of(holder), false);
+          g.drawImage(nonWithdrawableImage, x, 0, this);
           index++;
         }
       }
@@ -727,18 +680,18 @@ public final class UnitChooser extends JPanel {
       }
     }
 
-    public Optional<Image> getImage(final ImageKey imageKey, final boolean nonWithdrawable) {
-      final var undecoratedImage = unitImageFactoryForDecoratedImages.getImage(imageKey);
+    // false positive
+    @SuppressWarnings("PMD.UnusedPrivateMethod")
+    private Image getImage(final ImageKey imageKey, final boolean nonWithdrawable) {
+      final Image undecoratedImage = unitImageFactoryForDecoratedImages.getImage(imageKey);
 
-      return nonWithdrawable && undecoratedImage.isPresent()
-          ? getImage(undecoratedImage.get())
-          : undecoratedImage;
+      return nonWithdrawable ? getImage(undecoratedImage) : undecoratedImage;
     }
 
-    private Optional<Image> getImage(final Image undecoratedImage) {
+    private Image getImage(final Image undecoratedImage) {
       final var cachedImage = images.get(undecoratedImage);
       if (cachedImage != null) {
-        return Optional.of(cachedImage);
+        return cachedImage;
       }
 
       final var unitImageWithNonWithdrawableImage =
@@ -756,7 +709,7 @@ public final class UnitChooser extends JPanel {
 
       images.put(undecoratedImage, unitImageWithNonWithdrawableImage);
 
-      return Optional.of(unitImageWithNonWithdrawableImage);
+      return unitImageWithNonWithdrawableImage;
     }
 
     private BufferedImage loadImage(final String fileName) {

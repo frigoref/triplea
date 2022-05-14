@@ -22,7 +22,6 @@ import games.strategy.triplea.delegate.battle.IBattle;
 import games.strategy.triplea.delegate.battle.IBattle.BattleType;
 import games.strategy.triplea.delegate.move.validation.MoveValidator;
 import games.strategy.triplea.formatter.MyFormatter;
-import games.strategy.triplea.ui.panel.move.MovePanel;
 import games.strategy.triplea.util.TransportUtils;
 import java.io.Serializable;
 import java.math.BigDecimal;
@@ -173,7 +172,7 @@ public class MovePerformer implements Serializable {
             change.add(Route.getFuelChanges(units, route, gamePlayer, data));
 
             markTransportsMovement(arrived, transporting, route);
-            if (route.anyMatch(mustFightThrough) && !arrived.isEmpty()) {
+            if (!arrived.isEmpty() && route.anyMatch(mustFightThrough)) {
               boolean ignoreBattle = false;
               // could it be a bombing raid
               final Collection<Unit> enemyUnits =
@@ -194,8 +193,7 @@ public class MovePerformer implements Serializable {
                   PredicateBuilder.of(Matches.unitIsStrategicBomber())
                       .orIf(canCreateAirBattle, Matches.unitCanEscort())
                       .build();
-              final boolean allCanBomb =
-                  !arrived.isEmpty() && arrived.stream().allMatch(allBombingRaid);
+              final boolean allCanBomb = arrived.stream().allMatch(allBombingRaid);
               final Collection<Unit> enemyTargets =
                   CollectionUtils.getMatches(
                       enemyTargetsTotal,
@@ -207,7 +205,6 @@ public class MovePerformer implements Serializable {
                   !enemyTargets.isEmpty()
                       || (!enemyTargetsTotal.isEmpty()
                           && canCreateAirBattle
-                          && !arrived.isEmpty()
                           && arrived.stream().allMatch(Matches.unitCanEscort()));
               boolean targetedAttack = false;
               // if it's all bombers and there's something to bomb
@@ -228,14 +225,12 @@ public class MovePerformer implements Serializable {
                         getRemotePlayer()
                             .whatShouldBomberBomb(route.getEnd(), enemyTargets, arrived);
                   } else if (!enemyTargets.isEmpty()) {
-                    target = enemyTargets.iterator().next();
+                    target = CollectionUtils.getAny(enemyTargets);
                   } else {
                     // in case we are escorts only
-                    target = enemyTargetsTotal.iterator().next();
+                    target = CollectionUtils.getAny(enemyTargetsTotal);
                   }
-                  if (target == null) {
-                    targetedAttack = false;
-                  } else {
+                  if (target != null) {
                     targetedAttack = true;
                     final Map<Unit, Set<Unit>> targets = new HashMap<>();
                     targets.put(target, new HashSet<>(arrived));
@@ -257,9 +252,7 @@ public class MovePerformer implements Serializable {
               // Ignore Trn on Trn forces.
               if (Properties.getIgnoreTransportInMovement(bridge.getData().getProperties())) {
                 final boolean allOwnedTransports =
-                    !arrived.isEmpty()
-                        && arrived.stream()
-                            .allMatch(Matches.unitIsTransportButNotCombatTransport());
+                    arrived.stream().allMatch(Matches.unitIsTransportButNotCombatTransport());
                 final boolean allEnemyTransports =
                     !enemyUnits.isEmpty()
                         && enemyUnits.stream()
@@ -287,9 +280,7 @@ public class MovePerformer implements Serializable {
                 // battle records).
                 for (final Territory t :
                     route.getMatches(
-                        Matches
-                            .terrIsOwnedByPlayerRelationshipCanTakeOwnedTerrAndPassableAndNotWater(
-                                gamePlayer)
+                        Matches.isTerritoryNotUnownedWaterAndCanBeTakenOverBy(gamePlayer)
                             .and(Matches.territoryIsBlitzable(gamePlayer, data)))) {
                   if (Matches.isTerritoryEnemy(gamePlayer, data.getRelationshipTracker()).test(t)
                       || Matches.territoryHasEnemyUnits(gamePlayer, data.getRelationshipTracker())
@@ -336,39 +327,30 @@ public class MovePerformer implements Serializable {
 
   private static Predicate<Territory> getMustFightThroughMatch(
       final GamePlayer gamePlayer, final GameState data) {
-    return Matches.isTerritoryEnemyAndNotUnownedWaterOrImpassableOrRestricted(
-            gamePlayer, data.getProperties(), data.getRelationshipTracker())
+    return Matches.isTerritoryEnemyAndNotUnownedWaterOrImpassableOrRestricted(gamePlayer)
         .or(Matches.territoryHasNonSubmergedEnemyUnits(gamePlayer, data.getRelationshipTracker()))
-        .or(
-            Matches.terrIsOwnedByPlayerRelationshipCanTakeOwnedTerrAndPassableAndNotWater(
-                gamePlayer));
+        .or(Matches.isTerritoryNotUnownedWaterAndCanBeTakenOverBy(gamePlayer));
   }
 
   private Change markMovementChange(
       final Collection<Unit> units, final Route route, final GamePlayer gamePlayer) {
     final GameData data = bridge.getData();
     final CompositeChange change = new CompositeChange();
-    final Territory routeStart = route.getStart();
-    final TerritoryAttachment taRouteStart = TerritoryAttachment.get(routeStart);
-    final Territory routeEnd = route.getEnd();
-    TerritoryAttachment taRouteEnd = null;
-    if (routeEnd != null) {
-      taRouteEnd = TerritoryAttachment.get(routeEnd);
-    }
     // only units owned by us need to be marked
     final RelationshipTracker relationshipTracker = data.getRelationshipTracker();
+    final Territory routeStart = route.getStart();
+    final Territory routeEnd = route.getEnd();
     for (final Unit unit : CollectionUtils.getMatches(units, Matches.unitIsOwnedBy(gamePlayer))) {
       BigDecimal moved = route.getMovementCost(unit);
       final UnitAttachment ua = UnitAttachment.get(unit.getType());
       if (ua.getIsAir()) {
-        if (taRouteStart != null
-            && taRouteStart.getAirBase()
-            && relationshipTracker.isAllied(route.getStart().getOwner(), unit.getOwner())) {
+        if (TerritoryAttachment.hasAirBase(routeStart)
+            && relationshipTracker.isAllied(routeStart.getOwner(), unit.getOwner())) {
           moved = moved.subtract(BigDecimal.ONE);
         }
-        if (taRouteEnd != null
-            && taRouteEnd.getAirBase()
-            && relationshipTracker.isAllied(route.getEnd().getOwner(), unit.getOwner())) {
+        if (routeEnd != null
+            && TerritoryAttachment.hasAirBase(routeEnd)
+            && relationshipTracker.isAllied(routeEnd.getOwner(), unit.getOwner())) {
           moved = moved.subtract(BigDecimal.ONE);
         }
       }
@@ -387,11 +369,9 @@ public class MovePerformer implements Serializable {
     if (routeEnd != null
         && Properties.getSubsCanEndNonCombatMoveWithEnemies(data.getProperties())
         && GameStepPropertiesHelper.isNonCombatMove(data, false)
-        && routeEnd
-            .getUnitCollection()
-            .anyMatch(
-                Matches.unitIsEnemyOf(data.getRelationshipTracker(), gamePlayer)
-                    .and(Matches.unitIsDestroyer()))) {
+        && routeEnd.anyUnitsMatch(
+            Matches.unitIsEnemyOf(data.getRelationshipTracker(), gamePlayer)
+                .and(Matches.unitIsDestroyer()))) {
       // if we are allowed to have our subs enter any sea zone with enemies during noncombat, we
       // want to make sure we
       // can't keep moving them if there is an enemy destroyer there
@@ -406,9 +386,6 @@ public class MovePerformer implements Serializable {
   /** Marks transports and units involved in unloading with no movement left. */
   private void markTransportsMovement(
       final Collection<Unit> arrived, final Map<Unit, Unit> transporting, final Route route) {
-    if (transporting == null) {
-      return;
-    }
     final GameData data = bridge.getData();
     final Predicate<Unit> paratroopNAirTransports =
         Matches.unitIsAirTransport().or(Matches.unitIsAirTransportable());
@@ -438,7 +415,6 @@ public class MovePerformer implements Serializable {
       final Collection<Unit> airTransports =
           CollectionUtils.getMatches(arrived, Matches.unitIsAirTransport());
       airTransports.addAll(dependentAirTransportableUnits.keySet());
-      MovePanel.clearDependents(airTransports);
     }
     // load the transports
     if (route.isLoad() || paratroopsLanding) {

@@ -18,18 +18,17 @@ import javax.swing.JLabel;
 import javax.swing.JOptionPane;
 import javax.swing.SwingUtilities;
 import org.triplea.java.collections.IntegerMap;
-import org.triplea.swing.JButtonBuilder;
+import org.triplea.swing.SwingComponents;
 
 class RepairPanel extends ActionPanel {
   private static final long serialVersionUID = 3045997038627313714L;
   private static final String CHANGE = "Change...";
   private static final String BUY = "Repair...";
-  private final JLabel actionLabel = new JLabel();
   private Map<Unit, IntegerMap<RepairRule>> repair;
   private boolean bid;
   private Collection<GamePlayer> allowedPlayersToRepair;
   private final SimpleUnitPanel unitsPanel;
-  private final JLabel repairedSoFar = new JLabel();
+  private final JLabel repairedSoFar = createIndentedLabel();
   private final JButton buyButton;
 
   private final ActionListener purchaseAction =
@@ -75,20 +74,16 @@ class RepairPanel extends ActionPanel {
         () -> {
           removeAll();
           actionLabel.setText(gamePlayer.getName() + " repair");
+          add(SwingComponents.leftBox(actionLabel));
+
           buyButton.setText(BUY);
-          add(actionLabel);
-          add(buyButton);
-          add(
-              new JButtonBuilder()
-                  .title("Done")
-                  .actionListener(this::performDone)
-                  .toolTip(ActionButtons.DONE_BUTTON_TOOLTIP)
-                  .build());
+          add(createButtonsPanel(buyButton, createDoneButton()));
+
           repairedSoFar.setText("");
           add(Box.createVerticalStrut(9));
           add(repairedSoFar);
           add(Box.createVerticalStrut(4));
-          unitsPanel.setUnitsFromRepairRuleMap(new HashMap<>(), gamePlayer, getData());
+          unitsPanel.setUnitsFromRepairRuleMap(Map.of(), gamePlayer, getData());
           add(unitsPanel);
           add(Box.createVerticalGlue());
           refresh.run();
@@ -102,7 +97,7 @@ class RepairPanel extends ActionPanel {
       final int selectedOption =
           JOptionPane.showConfirmDialog(
               JOptionPane.getFrameForComponent(RepairPanel.this),
-              "Are you sure you dont want to repair anything?",
+              "Are you sure you don't want to repair anything?",
               "End Purchase",
               JOptionPane.YES_NO_OPTION);
       if (selectedOption != JOptionPane.YES_OPTION) {

@@ -418,7 +418,7 @@ public abstract class AbstractEndTurnDelegate extends BaseTripleADelegate
               currTerritory
                   .getUnitCollection()
                   .getMatches(
-                      Matches.unitOwnedBy(player)
+                      Matches.unitIsOwnedBy(player)
                           .and(Matches.unitCanBeGivenByTerritoryTo(newOwner)));
           if (!units.isEmpty()) {
             change.add(ChangeFactory.changeOwner(units, newOwner, currTerritory));
@@ -429,7 +429,7 @@ public abstract class AbstractEndTurnDelegate extends BaseTripleADelegate
     }
     if (!change.isEmpty() && !changeList.isEmpty()) {
       if (changeList.size() == 1) {
-        final Tuple<Territory, Collection<Unit>> tuple = changeList.iterator().next();
+        final Tuple<Territory, Collection<Unit>> tuple = CollectionUtils.getAny(changeList);
         bridge
             .getHistoryWriter()
             .startEvent(
@@ -529,19 +529,19 @@ public abstract class AbstractEndTurnDelegate extends BaseTripleADelegate
         }
         if (numberOfDice > 0) {
           // there is an issue with maps that have lots of rolls without any pause between them:
-          // they are causing the
-          // crypted random source (ie: live and pbem games) to lock up or error out
-          // so we need to slow them down a bit, until we come up with a better solution (like
-          // aggregating all the
-          // chances together, then getting a ton of random numbers at once instead of one at a
-          // time)
-          Interruptibles.sleep(100);
+          // they are causing the crypted random source (ie: live and pbem games) to lock up or
+          // error out so we need to slow them down a bit, until we come up with a better solution
+          // (like aggregating all the chances together, then getting a ton of random numbers at
+          // once instead of one at a time)
+          if (PbemMessagePoster.gameDataHasPlayByEmailOrForumMessengers(data)) {
+            Interruptibles.sleep(100);
+          }
           final String transcript = "Rolling for Convoy Blockade Damage in " + b.getName();
           final int[] dice =
               bridge.getRandom(
                   CONVOY_BLOCKADE_DICE_SIDES,
                   numberOfDice,
-                  enemies.iterator().next().getOwner(),
+                  CollectionUtils.getAny(enemies).getOwner(),
                   DiceType.BOMBING,
                   transcript);
           transcripts.add(transcript + ". Rolls: " + MyFormatter.asDice(dice));

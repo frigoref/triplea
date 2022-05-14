@@ -5,18 +5,23 @@ import games.strategy.engine.data.GamePlayer;
 import games.strategy.triplea.ui.panels.map.MapPanel;
 import java.awt.Dimension;
 import java.util.concurrent.CountDownLatch;
+import javax.swing.BorderFactory;
 import javax.swing.BoxLayout;
+import javax.swing.JButton;
+import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.SwingUtilities;
-import javax.swing.border.EmptyBorder;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.Setter;
+import org.triplea.swing.JButtonBuilder;
+import org.triplea.swing.JLabelBuilder;
 import org.triplea.swing.SwingComponents;
 
 /** Abstract superclass for all action panels. */
 public abstract class ActionPanel extends JPanel {
   private static final long serialVersionUID = -5954576036704958641L;
+  protected final JLabel actionLabel = createIndentedLabel();
 
   @Getter(AccessLevel.PROTECTED)
   protected final MapPanel map;
@@ -40,8 +45,26 @@ public abstract class ActionPanel extends JPanel {
     this.data = data;
     this.map = map;
     setLayout(new BoxLayout(this, BoxLayout.Y_AXIS));
-    setBorder(new EmptyBorder(5, 5, 0, 0));
+    setBorder(BorderFactory.createEmptyBorder(5, 0, 0, 0));
     setMinimumSize(new Dimension(240, 0));
+  }
+
+  /**
+   * Creates a label suitable for showing text directly in the action panel. This allows for
+   * consistent indentation between different panels without requiring other non-label component to
+   * be indented.
+   */
+  public static JLabel createIndentedLabel() {
+    return new JLabelBuilder().border(BorderFactory.createEmptyBorder(0, 5, 0, 0)).build();
+  }
+
+  protected static JPanel createButtonsPanel(JButton... buttons) {
+    JPanel buttonsPanel = new JPanel();
+    buttonsPanel.setLayout(new BoxLayout(buttonsPanel, BoxLayout.X_AXIS));
+    for (JButton button : buttons) {
+      buttonsPanel.add(button);
+    }
+    return buttonsPanel;
   }
 
   /**
@@ -96,6 +119,14 @@ public abstract class ActionPanel extends JPanel {
   public void display(final GamePlayer player) {
     currentPlayer = player;
     setActive(true);
+  }
+
+  protected JButton createDoneButton() {
+    return new JButtonBuilder()
+        .title("Done")
+        .actionListener(this::performDone)
+        .toolTip(ActionButtons.DONE_BUTTON_TOOLTIP)
+        .build();
   }
 
   /**

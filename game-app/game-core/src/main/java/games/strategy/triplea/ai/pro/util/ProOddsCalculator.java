@@ -8,6 +8,7 @@ import games.strategy.engine.data.Unit;
 import games.strategy.triplea.Properties;
 import games.strategy.triplea.ai.pro.ProData;
 import games.strategy.triplea.ai.pro.data.ProBattleResult;
+import games.strategy.triplea.ai.pro.data.ProTerritory;
 import games.strategy.triplea.delegate.Matches;
 import games.strategy.triplea.delegate.TerritoryEffectHelper;
 import games.strategy.triplea.odds.calculator.AggregateResults;
@@ -98,6 +99,16 @@ public class ProOddsCalculator {
     return callBattleCalc(proData, t, attackingUnits, defendingUnits, bombardingUnits);
   }
 
+  public ProBattleResult estimateDefendBattleResults(
+      final ProData proData, final ProTerritory proTerritory, final Collection<Unit> defenders) {
+    return estimateDefendBattleResults(
+        proData,
+        proTerritory.getTerritory(),
+        proTerritory.getMaxEnemyUnits(),
+        defenders,
+        proTerritory.getMaxEnemyBombardUnits());
+  }
+
   public ProBattleResult calculateBattleResultsNoSubmerge(
       final ProData proData,
       final Territory t,
@@ -106,6 +117,21 @@ public class ProOddsCalculator {
       final Collection<Unit> bombardingUnits) {
     return calculateBattleResults(
         proData, t, attackingUnits, defendingUnits, bombardingUnits, false);
+  }
+
+  public ProBattleResult calculateBattleResults(
+      final ProData proData, final ProTerritory proTerritory, final Collection<Unit> defenders) {
+    return calculateBattleResults(
+        proData,
+        proTerritory.getTerritory(),
+        proTerritory.getMaxEnemyUnits(),
+        defenders,
+        proTerritory.getMaxEnemyBombardUnits());
+  }
+
+  public ProBattleResult calculateBattleResults(
+      final ProData proData, final ProTerritory proTerritory) {
+    return calculateBattleResults(proData, proTerritory, proTerritory.getAllDefenders());
   }
 
   public ProBattleResult calculateBattleResults(
@@ -125,7 +151,6 @@ public class ProOddsCalculator {
       final Collection<Unit> defendingUnits,
       final Collection<Unit> bombardingUnits,
       final boolean checkSubmerge) {
-
     final ProBattleResult result =
         checkIfNoAttackersOrDefenders(proData, t, attackingUnits, defendingUnits, checkSubmerge);
     if (result != null) {
@@ -219,8 +244,8 @@ public class ProOddsCalculator {
 
     final int minArmySize = Math.min(attackingUnits.size(), defendingUnits.size());
     final int runCount = Math.max(16, 100 - minArmySize);
-    final GamePlayer attacker = attackingUnits.iterator().next().getOwner();
-    final GamePlayer defender = defendingUnits.iterator().next().getOwner();
+    final GamePlayer attacker = CollectionUtils.getAny(attackingUnits).getOwner();
+    final GamePlayer defender = CollectionUtils.getAny(defendingUnits).getOwner();
     final AggregateResults results =
         calc.calculate(
             attacker,
@@ -281,7 +306,7 @@ public class ProOddsCalculator {
     // Create battle result object
     final List<Territory> territoryList = new ArrayList<>();
     territoryList.add(t);
-    return (!territoryList.isEmpty() && territoryList.stream().allMatch(Matches.territoryIsLand()))
+    return territoryList.stream().allMatch(Matches.territoryIsLand())
         ? new ProBattleResult(
             winPercentage,
             tuvSwing,

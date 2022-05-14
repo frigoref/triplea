@@ -1,7 +1,6 @@
 package games.strategy.triplea.attachments;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
 import games.strategy.engine.data.Attachable;
 import games.strategy.engine.data.DefaultAttachment;
@@ -20,6 +19,7 @@ import games.strategy.triplea.delegate.Matches;
 import games.strategy.triplea.delegate.TechAdvance;
 import games.strategy.triplea.delegate.TechTracker;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -121,8 +121,7 @@ public class TechAbilityAttachment extends DefaultAttachment {
     putter.accept(getUnitType(s[1]), getInt(s[0]));
   }
 
-  @VisibleForTesting
-  static int sumIntegerMap(
+  public static int sumIntegerMap(
       final Function<TechAbilityAttachment, IntegerMap<UnitType>> mapper,
       final UnitType ut,
       final Collection<TechAdvance> techAdvances) {
@@ -170,12 +169,8 @@ public class TechAbilityAttachment extends DefaultAttachment {
     attackBonus = value;
   }
 
-  private IntegerMap<UnitType> getAttackBonus() {
+  public IntegerMap<UnitType> getAttackBonus() {
     return attackBonus;
-  }
-
-  static int getAttackBonus(final UnitType ut, final Collection<TechAdvance> techAdvances) {
-    return sumIntegerMap(TechAbilityAttachment::getAttackBonus, ut, techAdvances);
   }
 
   private void resetAttackBonus() {
@@ -190,12 +185,8 @@ public class TechAbilityAttachment extends DefaultAttachment {
     defenseBonus = value;
   }
 
-  private IntegerMap<UnitType> getDefenseBonus() {
+  public IntegerMap<UnitType> getDefenseBonus() {
     return defenseBonus;
-  }
-
-  static int getDefenseBonus(final UnitType ut, final Collection<TechAdvance> techAdvances) {
-    return sumIntegerMap(TechAbilityAttachment::getDefenseBonus, ut, techAdvances);
   }
 
   private void resetDefenseBonus() {
@@ -210,12 +201,8 @@ public class TechAbilityAttachment extends DefaultAttachment {
     movementBonus = value;
   }
 
-  private IntegerMap<UnitType> getMovementBonus() {
+  public IntegerMap<UnitType> getMovementBonus() {
     return movementBonus;
-  }
-
-  static int getMovementBonus(final UnitType ut, final Collection<TechAdvance> techAdvances) {
-    return sumIntegerMap(TechAbilityAttachment::getMovementBonus, ut, techAdvances);
   }
 
   private void resetMovementBonus() {
@@ -230,12 +217,8 @@ public class TechAbilityAttachment extends DefaultAttachment {
     radarBonus = value;
   }
 
-  private IntegerMap<UnitType> getRadarBonus() {
+  public IntegerMap<UnitType> getRadarBonus() {
     return radarBonus;
-  }
-
-  static int getRadarBonus(final UnitType ut, final Collection<TechAdvance> techAdvances) {
-    return sumIntegerMap(TechAbilityAttachment::getRadarBonus, ut, techAdvances);
   }
 
   private void resetRadarBonus() {
@@ -250,12 +233,8 @@ public class TechAbilityAttachment extends DefaultAttachment {
     airAttackBonus = value;
   }
 
-  private IntegerMap<UnitType> getAirAttackBonus() {
+  public IntegerMap<UnitType> getAirAttackBonus() {
     return airAttackBonus;
-  }
-
-  static int getAirAttackBonus(final UnitType ut, final Collection<TechAdvance> techAdvances) {
-    return sumIntegerMap(TechAbilityAttachment::getAirAttackBonus, ut, techAdvances);
   }
 
   private void resetAirAttackBonus() {
@@ -270,12 +249,8 @@ public class TechAbilityAttachment extends DefaultAttachment {
     airDefenseBonus = value;
   }
 
-  private IntegerMap<UnitType> getAirDefenseBonus() {
+  public IntegerMap<UnitType> getAirDefenseBonus() {
     return airDefenseBonus;
-  }
-
-  static int getAirDefenseBonus(final UnitType ut, final Collection<TechAdvance> techAdvances) {
-    return sumIntegerMap(TechAbilityAttachment::getAirDefenseBonus, ut, techAdvances);
   }
 
   private void resetAirDefenseBonus() {
@@ -505,7 +480,7 @@ public class TechAbilityAttachment extends DefaultAttachment {
     final String unitType = s[0];
     // validate that this unit exists in the xml
     final UnitType ut = getUnitType(unitType);
-    final Set<String> abilities = unitAbilitiesGained.getOrDefault(ut, new HashSet<>());
+    final Set<String> abilities = unitAbilitiesGained.computeIfAbsent(ut, key -> new HashSet<>());
     // start at 1
     for (int i = 1; i < s.length; i++) {
       final String ability = s[i];
@@ -519,30 +494,14 @@ public class TechAbilityAttachment extends DefaultAttachment {
       }
       abilities.add(ability);
     }
-    unitAbilitiesGained.put(ut, abilities);
   }
 
   private void setUnitAbilitiesGained(final Map<UnitType, Set<String>> value) {
     unitAbilitiesGained = value;
   }
 
-  private Map<UnitType, Set<String>> getUnitAbilitiesGained() {
-    return unitAbilitiesGained;
-  }
-
-  public static boolean getUnitAbilitiesGained(
-      final String filterForAbility,
-      final UnitType ut,
-      final Collection<TechAdvance> techAdvances) {
-    Preconditions.checkNotNull(filterForAbility);
-    return techAdvances.stream()
-        .map(TechAbilityAttachment::get)
-        .filter(Objects::nonNull)
-        .map(TechAbilityAttachment::getUnitAbilitiesGained)
-        .map(m -> m.get(ut))
-        .filter(Objects::nonNull)
-        .flatMap(Collection::stream)
-        .anyMatch(filterForAbility::equals);
+  public Map<UnitType, Set<String>> getUnitAbilitiesGained() {
+    return Collections.unmodifiableMap(unitAbilitiesGained);
   }
 
   private void resetUnitAbilitiesGained() {
@@ -718,10 +677,9 @@ public class TechAbilityAttachment extends DefaultAttachment {
         final Map<String, Set<UnitType>> mapAa = taa.getAirborneTargettedByAa();
         if (mapAa != null && !mapAa.isEmpty()) {
           for (final Entry<String, Set<UnitType>> entry : mapAa.entrySet()) {
-            final Set<UnitType> current =
-                airborneTargettedByAa.getOrDefault(entry.getKey(), new HashSet<>());
-            current.addAll(entry.getValue());
-            airborneTargettedByAa.put(entry.getKey(), current);
+            airborneTargettedByAa
+                .computeIfAbsent(entry.getKey(), key -> new HashSet<>())
+                .addAll(entry.getValue());
           }
         }
       }
@@ -741,12 +699,8 @@ public class TechAbilityAttachment extends DefaultAttachment {
     attackRollsBonus = value;
   }
 
-  private IntegerMap<UnitType> getAttackRollsBonus() {
+  public IntegerMap<UnitType> getAttackRollsBonus() {
     return attackRollsBonus;
-  }
-
-  static int getAttackRollsBonus(final UnitType ut, final Collection<TechAdvance> techAdvances) {
-    return sumIntegerMap(TechAbilityAttachment::getAttackRollsBonus, ut, techAdvances);
   }
 
   private void resetAttackRollsBonus() {
@@ -761,12 +715,8 @@ public class TechAbilityAttachment extends DefaultAttachment {
     defenseRollsBonus = value;
   }
 
-  private IntegerMap<UnitType> getDefenseRollsBonus() {
+  public IntegerMap<UnitType> getDefenseRollsBonus() {
     return defenseRollsBonus;
-  }
-
-  static int getDefenseRollsBonus(final UnitType ut, final Collection<TechAdvance> techAdvances) {
-    return sumIntegerMap(TechAbilityAttachment::getDefenseRollsBonus, ut, techAdvances);
   }
 
   private void setBombingBonus(final String value) throws GameParseException {

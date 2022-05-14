@@ -29,13 +29,12 @@ import javax.swing.JScrollPane;
 import javax.swing.SwingUtilities;
 import org.triplea.sound.ClipPlayer;
 import org.triplea.sound.SoundPath;
-import org.triplea.swing.JButtonBuilder;
 import org.triplea.swing.SwingAction;
+import org.triplea.swing.SwingComponents;
 
 /** Similar to PoliticsPanel, but for UserActionAttachment/Delegate. */
 public class UserActionPanel extends ActionPanel {
   private static final long serialVersionUID = -2735582890226625860L;
-  private final JLabel actionLabel = new JLabel();
   private JButton selectUserActionButton = null;
   private JButton doneButton = null;
   private UserActionAttachment choice = null;
@@ -122,20 +121,16 @@ public class UserActionPanel extends ActionPanel {
         () -> {
           removeAll();
           actionLabel.setText(gamePlayer.getName() + " Actions and Operations");
-          add(actionLabel);
+          add(SwingComponents.leftBox(actionLabel));
+
           selectUserActionButton = new JButton(selectUserActionAction);
           selectUserActionButton.setEnabled(false);
-          add(selectUserActionButton);
-          doneButton =
-              new JButtonBuilder()
-                  .title("Done")
-                  .actionListener(this::performDone)
-                  .toolTip(ActionButtons.DONE_BUTTON_TOOLTIP)
-                  .enabled(false)
-                  .build();
+          doneButton = createDoneButton();
           doneButton.setEnabled(false);
+
+          add(createButtonsPanel(selectUserActionButton, doneButton));
+
           SwingUtilities.invokeLater(() -> doneButton.requestFocusInWindow());
-          add(doneButton);
         });
   }
 
@@ -144,7 +139,7 @@ public class UserActionPanel extends ActionPanel {
     if (!firstRun
         || JOptionPane.showConfirmDialog(
                 JOptionPane.getFrameForComponent(UserActionPanel.this),
-                "Are you sure you dont want to do anything?",
+                "Are you sure you don't want to do anything?",
                 "End Actions",
                 JOptionPane.YES_NO_OPTION)
             == JOptionPane.YES_OPTION) {

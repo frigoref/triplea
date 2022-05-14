@@ -45,7 +45,7 @@ import org.triplea.util.Tuple;
 
 /** Despite the misleading name, this attaches not to individual Units but to UnitTypes. */
 public class UnitAttachment extends DefaultAttachment {
-  public static final String UNITSMAYNOTLANDONCARRIER = "unitsMayNotLandOnCarrier";
+  public static final String UNITS_MAY_NOT_LAND_ON_CARRIER = "unitsMayNotLandOnCarrier";
   public static final String UNITS_MAY_NOT_LEAVE_ALLIED_CARRIER = "unitsMayNotLeaveAlliedCarrier";
 
   public static final String IS_SEA = "isSea";
@@ -124,8 +124,7 @@ public class UnitAttachment extends DefaultAttachment {
 
   // aa related
   // "isAA" and "isAAmovement" are also valid setters, used as shortcuts for calling multiple aa
-  // related setters. Must
-  // keep.
+  // related setters. Must keep.
   private boolean isAaForCombatOnly = false;
   private boolean isAaForBombingThisUnitOnly = false;
   private boolean isAaForFlyOverOnly = false;
@@ -175,8 +174,7 @@ public class UnitAttachment extends DefaultAttachment {
   private int hitPoints = 1;
   private boolean canBeDamaged = false;
   // this is bombing damage, not hitpoints. default of 2 means that factories will take 2x the
-  // territory value
-  // they are in, of damage.
+  // territory value they are in, of damage.
   private int maxDamage = 2;
   // -1 if can't be disabled
   private int maxOperationalDamage = -1;
@@ -193,8 +191,7 @@ public class UnitAttachment extends DefaultAttachment {
   // -1 means anywhere
   private int canOnlyBePlacedInTerritoryValuedAtX = -1;
   // multiple colon delimited lists of the unit combos required for this unit to be built somewhere.
-  // (units must be in
-  // same territory, owned by player, not be disabled)
+  // (units must be in the same territory, owned by player, not be disabled)
   private List<String[]> requiresUnits = new ArrayList<>();
   private IntegerMap<UnitType> consumesUnits = new IntegerMap<>();
   // multiple colon delimited lists of the unit combos required for
@@ -226,8 +223,7 @@ public class UnitAttachment extends DefaultAttachment {
   private IntegerMap<UnitType> givesMovement = new IntegerMap<>();
   private List<Tuple<String, GamePlayer>> destroyedWhenCapturedBy = new ArrayList<>();
   // also an allowed setter is "setDestroyedWhenCapturedFrom" which will just create
-  // destroyedWhenCapturedBy with a
-  // specific list
+  // destroyedWhenCapturedBy with a specific list
   private Map<Integer, Tuple<Boolean, UnitType>> whenHitPointsDamagedChangesInto = new HashMap<>();
   private Map<Integer, Tuple<Boolean, UnitType>> whenHitPointsRepairedChangesInto = new HashMap<>();
   private Map<String, Tuple<String, IntegerMap<UnitType>>> whenCapturedChangesInto =
@@ -265,13 +261,15 @@ public class UnitAttachment extends DefaultAttachment {
   }
 
   private static Collection<UnitType> getUnitTypesFromUnitList(final Collection<Unit> units) {
-    final Collection<UnitType> types = new ArrayList<>();
-    for (final Unit u : units) {
-      if (!types.contains(u.getType())) {
-        types.add(u.getType());
-      }
-    }
-    return types;
+    return units.stream().map(Unit::getType).collect(Collectors.toSet());
+  }
+
+  private TechTracker getTechTracker() {
+    return getData().getTechTracker();
+  }
+
+  private UnitType getUnitType() {
+    return (UnitType) getAttachedTo();
   }
 
   private void setCanIntercept(final String value) {
@@ -352,16 +350,8 @@ public class UnitAttachment extends DefaultAttachment {
   }
 
   public int getAirDefense(final GamePlayer player) {
-
-    return (Math.min(
-        getData().getDiceSides(),
-        Math.max(
-            0,
-            airDefense
-                + TechAbilityAttachment.getAirDefenseBonus(
-                    (UnitType) this.getAttachedTo(),
-                    TechTracker.getCurrentTechAdvances(
-                        player, getData().getTechnologyFrontier())))));
+    final int bonus = getTechTracker().getAirDefenseBonus(player, getUnitType());
+    return Math.min(getData().getDiceSides(), Math.max(0, airDefense + bonus));
   }
 
   private void resetAirDefense() {
@@ -382,16 +372,8 @@ public class UnitAttachment extends DefaultAttachment {
   }
 
   public int getAirAttack(final GamePlayer player) {
-
-    return (Math.min(
-        getData().getDiceSides(),
-        Math.max(
-            0,
-            airAttack
-                + TechAbilityAttachment.getAirAttackBonus(
-                    (UnitType) this.getAttachedTo(),
-                    TechTracker.getCurrentTechAdvances(
-                        player, getData().getTechnologyFrontier())))));
+    final int bonus = getTechTracker().getAirAttackBonus(player, getUnitType());
+    return Math.min(getData().getDiceSides(), Math.max(0, airAttack + bonus));
   }
 
   private void resetAirAttack() {
@@ -646,12 +628,7 @@ public class UnitAttachment extends DefaultAttachment {
   }
 
   public boolean getCanBlitz(final GamePlayer player) {
-
-    return canBlitz
-        || TechAbilityAttachment.getUnitAbilitiesGained(
-            TechAbilityAttachment.ABILITY_CAN_BLITZ,
-            (UnitType) this.getAttachedTo(),
-            TechTracker.getCurrentTechAdvances(player, getData().getTechnologyFrontier()));
+    return canBlitz || getTechTracker().canBlitz(player, getUnitType());
   }
 
   private void resetCanBlitz() {
@@ -846,12 +823,7 @@ public class UnitAttachment extends DefaultAttachment {
   }
 
   public boolean getCanBombard(final GamePlayer player) {
-
-    return canBombard
-        || TechAbilityAttachment.getUnitAbilitiesGained(
-            TechAbilityAttachment.ABILITY_CAN_BOMBARD,
-            (UnitType) this.getAttachedTo(),
-            TechTracker.getCurrentTechAdvances(player, getData().getTechnologyFrontier()));
+    return canBombard || getTechTracker().canBombard(player, getUnitType());
   }
 
   private void resetCanBombard() {
@@ -1550,13 +1522,8 @@ public class UnitAttachment extends DefaultAttachment {
   }
 
   public int getMovement(final GamePlayer player) {
-
-    return Math.max(
-        0,
-        movement
-            + TechAbilityAttachment.getMovementBonus(
-                (UnitType) this.getAttachedTo(),
-                TechTracker.getCurrentTechAdvances(player, getData().getTechnologyFrontier())));
+    final int bonus = getTechTracker().getMovementBonus(player, getUnitType());
+    return Math.max(0, movement + bonus);
   }
 
   private void resetMovement() {
@@ -1578,12 +1545,8 @@ public class UnitAttachment extends DefaultAttachment {
   }
 
   public int getAttack(final GamePlayer player) {
-    final int attackValue =
-        attack
-            + TechAbilityAttachment.getAttackBonus(
-                (UnitType) this.getAttachedTo(),
-                TechTracker.getCurrentTechAdvances(player, getData().getTechnologyFrontier()));
-    return Math.min(getData().getDiceSides(), Math.max(0, attackValue));
+    final int bonus = getTechTracker().getAttackBonus(player, getUnitType());
+    return Math.min(getData().getDiceSides(), Math.max(0, attack + bonus));
   }
 
   private void resetAttack() {
@@ -1605,13 +1568,8 @@ public class UnitAttachment extends DefaultAttachment {
   }
 
   public int getAttackRolls(final GamePlayer player) {
-
-    return Math.max(
-        0,
-        attackRolls
-            + TechAbilityAttachment.getAttackRollsBonus(
-                (UnitType) this.getAttachedTo(),
-                TechTracker.getCurrentTechAdvances(player, getData().getTechnologyFrontier())));
+    final int bonus = getTechTracker().getAttackRollsBonus(player, getUnitType());
+    return Math.max(0, attackRolls + bonus);
   }
 
   private void resetAttackRolls() {
@@ -1633,14 +1591,11 @@ public class UnitAttachment extends DefaultAttachment {
   }
 
   public int getDefense(final GamePlayer player) {
-    int defenseValue =
-        defense
-            + TechAbilityAttachment.getDefenseBonus(
-                (UnitType) this.getAttachedTo(),
-                TechTracker.getCurrentTechAdvances(player, getData().getTechnologyFrontier()));
+    final int bonus = getTechTracker().getDefenseBonus(player, getUnitType());
+    int defenseValue = defense + bonus;
     if (defenseValue > 0 && getIsFirstStrike() && TechTracker.hasSuperSubs(player)) {
-      final int bonus = Properties.getSuperSubDefenseBonus(getData().getProperties());
-      defenseValue += bonus;
+      final int superSubBonus = Properties.getSuperSubDefenseBonus(getData().getProperties());
+      defenseValue += superSubBonus;
     }
     return Math.min(getData().getDiceSides(), Math.max(0, defenseValue));
   }
@@ -1664,12 +1619,8 @@ public class UnitAttachment extends DefaultAttachment {
   }
 
   public int getDefenseRolls(final GamePlayer player) {
-    return Math.max(
-        0,
-        defenseRolls
-            + TechAbilityAttachment.getDefenseRollsBonus(
-                (UnitType) this.getAttachedTo(),
-                TechTracker.getCurrentTechAdvances(player, getData().getTechnologyFrontier())));
+    final int bonus = getTechTracker().getDefenseRollsBonus(player, getUnitType());
+    return Math.max(0, defenseRolls + bonus);
   }
 
   private void resetDefenseRolls() {
@@ -1976,21 +1927,7 @@ public class UnitAttachment extends DefaultAttachment {
   }
 
   private void setConsumesUnits(final String value) throws GameParseException {
-    final String[] s = splitOnColon(value);
-    if (s.length != 2) {
-      throw new GameParseException("consumesUnits must have two fields" + thisErrorMsg());
-    }
-    final String unitTypeToProduce = s[1];
-    // validate that this unit exists in the xml
-    final UnitType ut = getData().getUnitTypeList().getUnitType(unitTypeToProduce);
-    if (ut == null) {
-      throw new GameParseException("No unit called:" + unitTypeToProduce + thisErrorMsg());
-    }
-    final int n = getInt(s[0]);
-    if (n < 1) {
-      throw new GameParseException("consumesUnits must have positive values" + thisErrorMsg());
-    }
-    consumesUnits.put(ut, n);
+    addToUnitTypeMap("consumesUnits", consumesUnits, value, 1);
   }
 
   private void setConsumesUnits(final IntegerMap<UnitType> value) {
@@ -2006,23 +1943,7 @@ public class UnitAttachment extends DefaultAttachment {
   }
 
   private void setCreatesUnitsList(final String value) throws GameParseException {
-    final String[] s = splitOnColon(value);
-    if (s.length <= 0 || s.length > 2) {
-      throw new GameParseException(
-          "createsUnitsList cannot be empty or have more than two fields" + thisErrorMsg());
-    }
-    final String unitTypeToProduce = s[1];
-    // validate that this unit exists in the xml
-    final UnitType ut = getData().getUnitTypeList().getUnitType(unitTypeToProduce);
-    if (ut == null) {
-      throw new GameParseException(
-          "createsUnitsList: No unit called:" + unitTypeToProduce + thisErrorMsg());
-    }
-    final int n = getInt(s[0]);
-    if (n < 0) {
-      throw new GameParseException("createsUnitsList cannot have negative values" + thisErrorMsg());
-    }
-    createsUnitsList.put(ut, n);
+    addToUnitTypeMap("createsUnitsList", createsUnitsList, value, 0);
   }
 
   private void setCreatesUnitsList(final IntegerMap<UnitType> value) {
@@ -2037,21 +1958,30 @@ public class UnitAttachment extends DefaultAttachment {
     createsUnitsList = new IntegerMap<>();
   }
 
-  private void setCreatesResourcesList(final String value) throws GameParseException {
+  private void addToUnitTypeMap(
+      String description, IntegerMap<UnitType> utMap, String value, int minValue)
+      throws GameParseException {
     final String[] s = splitOnColon(value);
     if (s.length <= 0 || s.length > 2) {
       throw new GameParseException(
-          "createsResourcesList cannot be empty or have more than two fields" + thisErrorMsg());
+          description + " cannot be empty or have more than two fields" + thisErrorMsg());
     }
-    final String resourceToProduce = s[1];
-    // validate that this resource exists in the xml
-    final Resource r = getData().getResourceList().getResource(resourceToProduce);
-    if (r == null) {
+    final String unitTypeToProduce = s[1];
+    // validate that this unit exists in the xml
+    final UnitType ut = getData().getUnitTypeList().getUnitType(unitTypeToProduce);
+    if (ut == null) {
       throw new GameParseException(
-          "createsResourcesList: No resource called:" + resourceToProduce + thisErrorMsg());
+          description + ": No unit called:" + unitTypeToProduce + thisErrorMsg());
     }
     final int n = getInt(s[0]);
-    createsResourcesList.put(r, n);
+    if (n < minValue) {
+      throw new GameParseException(description + " value must be >= " + minValue + thisErrorMsg());
+    }
+    utMap.put(ut, n);
+  }
+
+  private void setCreatesResourcesList(final String value) throws GameParseException {
+    addToResourceMap("createsResourcesList", createsResourcesList, value, true);
   }
 
   private void setCreatesResourcesList(final IntegerMap<Resource> value) {
@@ -2067,22 +1997,7 @@ public class UnitAttachment extends DefaultAttachment {
   }
 
   private void setFuelCost(final String value) throws GameParseException {
-    final String[] s = splitOnColon(value);
-    if (s.length != 2) {
-      throw new GameParseException("fuelCost must have two fields" + thisErrorMsg());
-    }
-    final String resourceToProduce = s[1];
-    // validate that this resource exists in the xml
-    final Resource r = getData().getResourceList().getResource(resourceToProduce);
-    if (r == null) {
-      throw new GameParseException(
-          "fuelCost: No resource called:" + resourceToProduce + thisErrorMsg());
-    }
-    final int n = getInt(s[0]);
-    if (n < 0) {
-      throw new GameParseException("fuelCost must have positive values" + thisErrorMsg());
-    }
-    fuelCost.put(r, n);
+    addToResourceMap("fuelCost", fuelCost, value, false);
   }
 
   private void setFuelCost(final IntegerMap<Resource> value) {
@@ -2098,22 +2013,7 @@ public class UnitAttachment extends DefaultAttachment {
   }
 
   private void setFuelFlatCost(final String value) throws GameParseException {
-    final String[] s = splitOnColon(value);
-    if (s.length != 2) {
-      throw new GameParseException("fuelFlatCost must have two fields" + thisErrorMsg());
-    }
-    final String resourceToProduce = s[1];
-    // validate that this resource exists in the xml
-    final Resource r = getData().getResourceList().getResource(resourceToProduce);
-    if (r == null) {
-      throw new GameParseException(
-          "fuelFlatCost: No resource called:" + resourceToProduce + thisErrorMsg());
-    }
-    final int n = getInt(s[0]);
-    if (n < 0) {
-      throw new GameParseException("fuelFlatCost must have positive values" + thisErrorMsg());
-    }
-    fuelFlatCost.put(r, n);
+    addToResourceMap("fuelFlatCost", fuelFlatCost, value, false);
   }
 
   private void setFuelFlatCost(final IntegerMap<Resource> value) {
@@ -2126,6 +2026,27 @@ public class UnitAttachment extends DefaultAttachment {
 
   private void resetFuelFlatCost() {
     fuelFlatCost = new IntegerMap<>();
+  }
+
+  private void addToResourceMap(
+      String description, IntegerMap<Resource> resourceMap, String value, boolean allowNegative)
+      throws GameParseException {
+    final String[] s = splitOnColon(value);
+    if (s.length != 2) {
+      throw new GameParseException(description + " must have two fields" + thisErrorMsg());
+    }
+    final String resourceToProduce = s[1];
+    // validate that this resource exists in the xml
+    final Resource r = getData().getResourceList().getResource(resourceToProduce);
+    if (r == null) {
+      throw new GameParseException(
+          description + ": No resource called:" + resourceToProduce + thisErrorMsg());
+    }
+    final int n = getInt(s[0]);
+    if (!allowNegative && n < 0) {
+      throw new GameParseException(description + " must have positive values" + thisErrorMsg());
+    }
+    resourceMap.put(r, n);
   }
 
   private void setBombingBonus(final String s) {
@@ -2190,7 +2111,7 @@ public class UnitAttachment extends DefaultAttachment {
     if (bombingTargets != null) {
       return bombingTargets;
     }
-    return new HashSet<>(unitTypeList.getAllUnitTypes());
+    return unitTypeList.getAllUnitTypes();
   }
 
   private void resetBombingTargets() {
@@ -2207,9 +2128,7 @@ public class UnitAttachment extends DefaultAttachment {
     for (final Unit u : bombersOrRockets) {
       final UnitAttachment ua = UnitAttachment.get(u.getType());
       final Set<UnitType> bombingTargets = ua.getBombingTargets(unitTypeList);
-      if (bombingTargets != null) {
-        allowedTargets = CollectionUtils.intersection(allowedTargets, bombingTargets);
-      }
+      allowedTargets = CollectionUtils.intersection(allowedTargets, bombingTargets);
     }
     return new HashSet<>(allowedTargets);
   }
@@ -2243,18 +2162,9 @@ public class UnitAttachment extends DefaultAttachment {
 
   public int getAttackAa(final GamePlayer player) {
     // TODO: this may cause major problems with Low Luck, if they have diceSides equal to something
-    // other than 6, or it
-    // does not divide perfectly into attackAAmaxDieSides
-
-    return Math.max(
-        0,
-        Math.min(
-            getAttackAaMaxDieSides(),
-            attackAa
-                + TechAbilityAttachment.getRadarBonus(
-                    (UnitType) this.getAttachedTo(),
-                    TechTracker.getCurrentTechAdvances(
-                        player, getData().getTechnologyFrontier()))));
+    // other than 6, or it does not divide perfectly into attackAAmaxDieSides
+    final int bonus = getTechTracker().getRadarBonus(player, getUnitType());
+    return Math.max(0, Math.min(getAttackAaMaxDieSides(), attackAa + bonus));
   }
 
   private void resetAttackAa() {
@@ -2277,18 +2187,9 @@ public class UnitAttachment extends DefaultAttachment {
 
   public int getOffensiveAttackAa(final GamePlayer player) {
     // TODO: this may cause major problems with Low Luck, if they have diceSides equal to something
-    // other than 6, or it
-    // does not divide perfectly into attackAAmaxDieSides
-
-    return Math.max(
-        0,
-        Math.min(
-            getOffensiveAttackAaMaxDieSides(),
-            offensiveAttackAa
-                + TechAbilityAttachment.getRadarBonus(
-                    (UnitType) this.getAttachedTo(),
-                    TechTracker.getCurrentTechAdvances(
-                        player, getData().getTechnologyFrontier()))));
+    // other than 6, or it does not divide perfectly into attackAAmaxDieSides
+    final int bonus = getTechTracker().getRadarBonus(player, getUnitType());
+    return Math.max(0, Math.min(getOffensiveAttackAaMaxDieSides(), offensiveAttackAa + bonus));
   }
 
   private void resetOffensiveAttackAa() {
@@ -2603,29 +2504,7 @@ public class UnitAttachment extends DefaultAttachment {
   }
 
   private void setMovementLimit(final String value) throws GameParseException {
-    if (value == null) {
-      movementLimit = null;
-      return;
-    }
-    final UnitType ut = (UnitType) this.getAttachedTo();
-    if (ut == null) {
-      throw new GameParseException("getAttachedTo returned null" + thisErrorMsg());
-    }
-    final String[] s = splitOnColon(value);
-    if (s.length != 2) {
-      throw new GameParseException(
-          "movementLimit must have 2 fields, value and count" + thisErrorMsg());
-    }
-    final int max = getInt(s[0]);
-    if (max < 0) {
-      throw new GameParseException(
-          "movementLimit count must have a positive number" + thisErrorMsg());
-    }
-    if (!(s[1].equals("owned") || s[1].equals("allied") || s[1].equals("total"))) {
-      throw new GameParseException(
-          "movementLimit value must owned, allied, or total" + thisErrorMsg());
-    }
-    movementLimit = Tuple.of(max, s[1]);
+    placementLimit = parseStackingLimit("movementLimit", value);
   }
 
   private void setMovementLimit(final Tuple<Integer, String> value) {
@@ -2641,29 +2520,7 @@ public class UnitAttachment extends DefaultAttachment {
   }
 
   private void setAttackingLimit(final String value) throws GameParseException {
-    if (value == null) {
-      attackingLimit = null;
-      return;
-    }
-    final UnitType ut = (UnitType) this.getAttachedTo();
-    if (ut == null) {
-      throw new GameParseException("getAttachedTo returned null" + thisErrorMsg());
-    }
-    final String[] s = splitOnColon(value);
-    if (s.length != 2) {
-      throw new GameParseException(
-          "attackingLimit must have 2 fields, value and count" + thisErrorMsg());
-    }
-    final int max = getInt(s[0]);
-    if (max < 0) {
-      throw new GameParseException(
-          "attackingLimit count must have a positive number" + thisErrorMsg());
-    }
-    if (!(s[1].equals("owned") || s[1].equals("allied") || s[1].equals("total"))) {
-      throw new GameParseException(
-          "attackingLimit value must owned, allied, or total" + thisErrorMsg());
-    }
-    attackingLimit = Tuple.of(max, s[1]);
+    attackingLimit = parseStackingLimit("attackingLimit", value);
   }
 
   private void setAttackingLimit(final Tuple<Integer, String> value) {
@@ -2679,29 +2536,7 @@ public class UnitAttachment extends DefaultAttachment {
   }
 
   private void setPlacementLimit(final String value) throws GameParseException {
-    if (value == null) {
-      placementLimit = null;
-      return;
-    }
-    final UnitType ut = (UnitType) this.getAttachedTo();
-    if (ut == null) {
-      throw new GameParseException("getAttachedTo returned null" + thisErrorMsg());
-    }
-    final String[] s = splitOnColon(value);
-    if (s.length != 2) {
-      throw new GameParseException(
-          "placementLimit must have 2 fields, value and count" + thisErrorMsg());
-    }
-    final int max = getInt(s[0]);
-    if (max < 0) {
-      throw new GameParseException(
-          "placementLimit count must have a positive number" + thisErrorMsg());
-    }
-    if (!(s[1].equals("owned") || s[1].equals("allied") || s[1].equals("total"))) {
-      throw new GameParseException(
-          "placementLimit value must owned, allied, or total" + thisErrorMsg());
-    }
-    placementLimit = Tuple.of(max, s[1]);
+    placementLimit = parseStackingLimit("placementLimit", value);
   }
 
   private void setPlacementLimit(final Tuple<Integer, String> value) {
@@ -2714,6 +2549,29 @@ public class UnitAttachment extends DefaultAttachment {
 
   private void resetPlacementLimit() {
     placementLimit = null;
+  }
+
+  private Tuple<Integer, String> parseStackingLimit(final String type, final String value)
+      throws GameParseException {
+    if (value == null) {
+      return null;
+    }
+    final UnitType ut = (UnitType) this.getAttachedTo();
+    if (ut == null) {
+      throw new GameParseException("getAttachedTo returned null" + thisErrorMsg());
+    }
+    final String[] s = splitOnColon(value);
+    if (s.length != 2) {
+      throw new GameParseException(type + " must have 2 fields, value and count" + thisErrorMsg());
+    }
+    final int max = getInt(s[0]);
+    if (max < 0) {
+      throw new GameParseException(type + " count must have a positive number" + thisErrorMsg());
+    }
+    if (!(s[1].equals("owned") || s[1].equals("allied") || s[1].equals("total"))) {
+      throw new GameParseException(type + " value must owned, allied, or total" + thisErrorMsg());
+    }
+    return Tuple.of(max, s[1]);
   }
 
   private void setTuv(final String s) {
@@ -2960,7 +2818,7 @@ public class UnitAttachment extends DefaultAttachment {
     if (!whenCombatDamaged.isEmpty()) {
       for (final Tuple<Tuple<Integer, Integer>, Tuple<String, String>> key : whenCombatDamaged) {
         final String obj = key.getSecond().getFirst();
-        if (obj.equals(UNITSMAYNOTLANDONCARRIER)) {
+        if (obj.equals(UNITS_MAY_NOT_LAND_ON_CARRIER)) {
           continue;
         }
         if (obj.equals(UNITS_MAY_NOT_LEAVE_ALLIED_CARRIER)) {
@@ -2968,7 +2826,7 @@ public class UnitAttachment extends DefaultAttachment {
         }
         throw new GameParseException(
             "whenCombatDamaged so far only supports: "
-                + UNITSMAYNOTLANDONCARRIER
+                + UNITS_MAY_NOT_LAND_ON_CARRIER
                 + ", "
                 + UNITS_MAY_NOT_LEAVE_ALLIED_CARRIER
                 + thisErrorMsg());
@@ -3031,6 +2889,34 @@ public class UnitAttachment extends DefaultAttachment {
     return ta != null && ta.getParatroopers();
   }
 
+  private static <T> String toString(final Collection<T> collection, final String nullStr) {
+    return collection == null ? nullStr : collection.isEmpty() ? "empty" : collection.toString();
+  }
+
+  private static <T> String toString(final Collection<T> collection) {
+    return toString(collection, "null");
+  }
+
+  private static String toString(final String[] collection) {
+    return collection == null
+        ? "null"
+        : collection.length == 0 ? "empty" : Arrays.toString(collection);
+  }
+
+  private static <T> String toString(final IntegerMap<T> collection) {
+    return collection == null ? "null" : collection.isEmpty() ? "empty" : collection.toString();
+  }
+
+  private static <K, V> String toString(final Map<K, V> collection) {
+    return collection == null ? "null" : collection.isEmpty() ? "empty" : collection.toString();
+  }
+
+  private static String toString(final List<String[]> collection) {
+    return collection == null
+        ? "null"
+        : collection.isEmpty() ? "empty" : MyFormatter.listOfArraysToString(collection);
+  }
+
   /**
    * Returns a list of all unit properties. Should cover ALL fields stored in UnitAttachment
    * Remember to test for null and fix arrays. The stats exporter relies on this toString having two
@@ -3091,9 +2977,9 @@ public class UnitAttachment extends DefaultAttachment {
         + "  isFirstStrike:"
         + isFirstStrike
         + "  canNotTarget:"
-        + (canNotTarget == null || canNotTarget.isEmpty() ? "empty" : canNotTarget.toString())
+        + toString(canNotTarget)
         + "  canNotBeTargetedBy:"
-        + (canNotBeTargetedBy.isEmpty() ? "empty" : canNotBeTargetedBy.toString())
+        + toString(canNotBeTargetedBy)
         + "  canMoveThroughEnemies:"
         + canMoveThroughEnemies
         + "  canBeMovedThroughByEnemies:"
@@ -3104,38 +2990,34 @@ public class UnitAttachment extends DefaultAttachment {
         + canBombard
         + "  bombard:"
         + bombard
-        + "  isAAforCombatOnly:"
+        + "  isAaForCombatOnly:"
         + isAaForCombatOnly
-        + "  isAAforBombingThisUnitOnly:"
+        + "  isAaForBombingThisUnitOnly:"
         + isAaForBombingThisUnitOnly
-        + "  isAAforFlyOverOnly:"
+        + "  isAaForFlyOverOnly:"
         + isAaForFlyOverOnly
-        + "  attackAA:"
+        + "  attackAa:"
         + attackAa
-        + "  offensiveAttackAA:"
+        + "  offensiveAttackAa:"
         + offensiveAttackAa
-        + "  attackAAmaxDieSides:"
+        + "  attackAaMaxDieSides:"
         + attackAaMaxDieSides
-        + "  offensiveAttackAAmaxDieSides:"
+        + "  offensiveAttackAaMaxDieSides:"
         + offensiveAttackAaMaxDieSides
-        + "  maxAAattacks:"
+        + "  maxAaAttacks:"
         + maxAaAttacks
-        + "  maxRoundsAA:"
+        + "  maxRoundsAa:"
         + maxRoundsAa
-        + "  mayOverStackAA:"
+        + "  mayOverStackAa:"
         + mayOverStackAa
-        + "  damageableAA:"
+        + "  damageableAa:"
         + damageableAa
-        + "  typeAA:"
+        + "  typeAa:"
         + typeAa
-        + "  targetsAA:"
-        + (targetsAa != null
-            ? (targetsAa.isEmpty() ? "empty" : targetsAa.toString())
-            : "all air units")
+        + "  targetsAa:"
+        + toString(targetsAa, "all air units")
         + "  willNotFireIfPresent:"
-        + (willNotFireIfPresent != null
-            ? (willNotFireIfPresent.isEmpty() ? "empty" : willNotFireIfPresent.toString())
-            : "null")
+        + toString(willNotFireIfPresent)
         + "  isRocket:"
         + isRocket
         + "  canProduceUnits:"
@@ -3143,19 +3025,13 @@ public class UnitAttachment extends DefaultAttachment {
         + "  canProduceXUnits:"
         + canProduceXUnits
         + "  createsUnitsList:"
-        + (createsUnitsList != null
-            ? (createsUnitsList.isEmpty() ? "empty" : createsUnitsList.toString())
-            : "null")
+        + toString(createsUnitsList)
         + "  createsResourcesList:"
-        + (createsResourcesList != null
-            ? (createsResourcesList.isEmpty() ? "empty" : createsResourcesList.toString())
-            : "null")
+        + toString(createsResourcesList)
         + "  fuelCost:"
-        + (fuelCost != null ? (fuelCost.isEmpty() ? "empty" : fuelCost.toString()) : "null")
+        + toString(fuelCost)
         + "  fuelFlatCost:"
-        + (fuelFlatCost != null
-            ? (fuelFlatCost.isEmpty() ? "empty" : fuelFlatCost.toString())
-            : "null")
+        + toString(fuelFlatCost)
         + "  isInfrastructure:"
         + isInfrastructure
         + "  isConstruction:"
@@ -3167,13 +3043,9 @@ public class UnitAttachment extends DefaultAttachment {
         + "  maxConstructionsPerTypePerTerr:"
         + maxConstructionsPerTypePerTerr
         + "  destroyedWhenCapturedBy:"
-        + (destroyedWhenCapturedBy != null
-            ? (destroyedWhenCapturedBy.isEmpty() ? "empty" : destroyedWhenCapturedBy.toString())
-            : "null")
+        + toString(destroyedWhenCapturedBy, "null")
         + "  canBeCapturedOnEnteringBy:"
-        + (canBeCapturedOnEnteringBy != null
-            ? (canBeCapturedOnEnteringBy.isEmpty() ? "empty" : canBeCapturedOnEnteringBy.toString())
-            : "null")
+        + toString(canBeCapturedOnEnteringBy, "null")
         + "  canBeDamaged:"
         + canBeDamaged
         + "  canDieFromReachingMaxDamage:"
@@ -3183,31 +3055,19 @@ public class UnitAttachment extends DefaultAttachment {
         + "  maxDamage:"
         + maxDamage
         + "  unitPlacementRestrictions:"
-        + (unitPlacementRestrictions != null
-            ? (unitPlacementRestrictions.length == 0
-                ? "empty"
-                : Arrays.toString(unitPlacementRestrictions))
-            : "null")
+        + toString(unitPlacementRestrictions)
         + "  requiresUnits:"
-        + (requiresUnits != null
-            ? (requiresUnits.isEmpty() ? "empty" : MyFormatter.listOfArraysToString(requiresUnits))
-            : "null")
+        + toString(requiresUnits)
         + "  consumesUnits:"
-        + (consumesUnits != null
-            ? (consumesUnits.isEmpty() ? "empty" : consumesUnits.toString())
-            : "null")
+        + toString(consumesUnits)
         + "  requiresUnitsToMove:"
-        + (requiresUnitsToMove != null
-            ? (requiresUnitsToMove.isEmpty()
-                ? "empty"
-                : MyFormatter.listOfArraysToString(requiresUnitsToMove))
-            : "null")
+        + toString(requiresUnitsToMove)
         + "  canOnlyBePlacedInTerritoryValuedAtX:"
         + canOnlyBePlacedInTerritoryValuedAtX
         + "  maxBuiltPerPlayer:"
         + maxBuiltPerPlayer
         + "  special:"
-        + (special != null ? (special.isEmpty() ? "empty" : special.toString()) : "null")
+        + toString(special)
         + "  isSuicideOnAttack:"
         + isSuicideOnAttack
         + "  isSuicideOnDefense:"
@@ -3217,21 +3077,13 @@ public class UnitAttachment extends DefaultAttachment {
         + "  isCombatTransport:"
         + isCombatTransport
         + "  canInvadeOnlyFrom:"
-        + (canInvadeOnlyFrom != null
-            ? (canInvadeOnlyFrom.length == 0 ? "empty" : Arrays.toString(canInvadeOnlyFrom))
-            : "null")
+        + toString(special)
         + "  canBeGivenByTerritoryTo:"
-        + (canBeGivenByTerritoryTo != null
-            ? (canBeGivenByTerritoryTo.isEmpty() ? "empty" : canBeGivenByTerritoryTo.toString())
-            : "null")
+        + toString(canBeGivenByTerritoryTo)
         + "  receivesAbilityWhenWith:"
-        + (receivesAbilityWhenWith != null
-            ? (receivesAbilityWhenWith.isEmpty() ? "empty" : receivesAbilityWhenWith.toString())
-            : "null")
+        + toString(receivesAbilityWhenWith)
         + "  whenCombatDamaged:"
-        + (whenCombatDamaged != null
-            ? (whenCombatDamaged.isEmpty() ? "empty" : whenCombatDamaged.toString())
-            : "null")
+        + toString(whenCombatDamaged, "null")
         + "  blockade:"
         + blockade
         + "  bombingMaxDieSides:"
@@ -3241,13 +3093,9 @@ public class UnitAttachment extends DefaultAttachment {
         + "  bombingTargets:"
         + bombingTargets
         + "  givesMovement:"
-        + (givesMovement != null
-            ? (givesMovement.isEmpty() ? "empty" : givesMovement.toString())
-            : "null")
+        + toString(givesMovement)
         + "  repairsUnits:"
-        + (repairsUnits != null
-            ? (repairsUnits.isEmpty() ? "empty" : repairsUnits.toString())
-            : "null")
+        + toString(repairsUnits)
         + "  canScramble:"
         + canScramble
         + "  maxScrambleDistance:"
@@ -3259,23 +3107,13 @@ public class UnitAttachment extends DefaultAttachment {
         + "  maxInterceptCount:"
         + maxInterceptCount
         + "  whenCapturedChangesInto:"
-        + (whenCapturedChangesInto != null
-            ? (whenCapturedChangesInto.isEmpty() ? "empty" : whenCapturedChangesInto.toString())
-            : "null")
-        + " whenCapturedSustainsDamage:"
+        + toString(whenCapturedChangesInto)
+        + "  whenCapturedSustainsDamage:"
         + whenCapturedSustainsDamage
         + "  whenHitPointsDamagedChangesInto:"
-        + (whenHitPointsDamagedChangesInto != null
-            ? (whenHitPointsDamagedChangesInto.isEmpty()
-                ? "empty"
-                : whenHitPointsDamagedChangesInto.toString())
-            : "null")
+        + toString(whenHitPointsDamagedChangesInto)
         + "  whenHitPointsRepairedChangesInto:"
-        + (whenHitPointsRepairedChangesInto != null
-            ? (whenHitPointsRepairedChangesInto.isEmpty()
-                ? "empty"
-                : whenHitPointsRepairedChangesInto.toString())
-            : "null")
+        + toString(whenHitPointsRepairedChangesInto)
         + "  canIntercept:"
         + canIntercept
         + "  requiresAirBaseToIntercept:"
@@ -3307,40 +3145,43 @@ public class UnitAttachment extends DefaultAttachment {
    * canBeCapturedOnEnteringBy.
    */
   public String toStringShortAndOnlyImportantDifferences(final GamePlayer player) {
-    final List<Tuple<String, String>> tuples = new ArrayList<>();
+    final Formatter formatter = new Formatter();
     final UnitType unitType = (UnitType) this.getAttachedTo();
 
     if (getIsAir()) {
-      tuples.add(Tuple.of("Type", "Air"));
+      formatter.append("Type", "Air");
     } else if (getIsSea()) {
-      tuples.add(Tuple.of("Type", "Sea"));
+      formatter.append("Type", "Sea");
     } else {
-      tuples.add(Tuple.of("Type", "Land"));
+      formatter.append("Type", "Land");
     }
     final int attackRolls = getAttackRolls(player);
     final int defenseRolls = getDefenseRolls(player);
     final String attack = (attackRolls > 1 ? (attackRolls + "x") : "") + getAttack(player);
     final String defense = (defenseRolls > 1 ? (defenseRolls + "x") : "") + getDefense(player);
     final String movement = String.valueOf(getMovement(player));
-    tuples.add(Tuple.of("Att | Def | Mov", attack + " | " + defense + " | " + movement));
+    formatter.append("Att | Def | Mov", attack + " | " + defense + " | " + movement);
     if (getHitPoints() > 1) {
-      tuples.add(Tuple.of("HP", String.valueOf(getHitPoints())));
+      formatter.append("HP", String.valueOf(getHitPoints()));
     }
 
     if (getCanProduceUnits() && getCanProduceXUnits() < 0) {
-      tuples.add(Tuple.of("Can Produce Units up to Territory Value", ""));
+      formatter.append("Can Produce Units up to Territory Value", "");
     } else if (getCanProduceUnits() && getCanProduceXUnits() > 0) {
-      tuples.add(Tuple.of("Can Produce Units", String.valueOf(getCanProduceXUnits())));
+      formatter.append("Can Produce Units", String.valueOf(getCanProduceXUnits()));
     }
-    addIntegerMapDescription("Creates Units each Turn", getCreatesUnitsList(), tuples);
-    addIntegerMapDescription("Produces Resources each Turn", getCreatesResourcesList(), tuples);
+    addIntegerMapDescription("Creates Units each Turn", getCreatesUnitsList(), formatter);
+    addIntegerMapDescription("Produces Resources each Turn", getCreatesResourcesList(), formatter);
 
-    addIntegerMapDescription("Fuel Cost per Movement", getFuelCost(), tuples);
-    addIntegerMapDescription("Fuel Cost each Turn if Moved", getFuelFlatCost(), tuples);
+    addIntegerMapDescription("Fuel Cost per Movement", getFuelCost(), formatter);
+    addIntegerMapDescription("Fuel Cost each Turn if Moved", getFuelFlatCost(), formatter);
 
     addAaDescription(
-        "Targeted Attack", getOffensiveAttackAa(player), getOffensiveAttackAaMaxDieSides(), tuples);
-    addAaDescription("Targeted Defense", getAttackAa(player), getAttackAaMaxDieSides(), tuples);
+        "Targeted Attack",
+        getOffensiveAttackAa(player),
+        getOffensiveAttackAaMaxDieSides(),
+        formatter);
+    addAaDescription("Targeted Defense", getAttackAa(player), getAttackAaMaxDieSides(), formatter);
 
     // TODO: Rework rocket description
     if (getIsRocket() && playerHasRockets(player)) {
@@ -3359,14 +3200,14 @@ public class UnitAttachment extends DefaultAttachment {
       } else {
         sb.append("1-").append(getData().getDiceSides()).append(" Rocket Damage, ");
       }
-      tuples.add(Tuple.of(sb.toString(), ""));
+      formatter.append(sb.toString(), "");
     }
 
     if (getIsInfrastructure()) {
-      tuples.add(Tuple.of("Can be Captured", ""));
+      formatter.append("Can be Captured", "");
     }
     if (getIsConstruction()) {
-      tuples.add(Tuple.of("Can be Placed Without Factory", ""));
+      formatter.append("Can be Placed Without Factory", "");
     }
 
     // TODO: Rework damaged description
@@ -3388,19 +3229,18 @@ public class UnitAttachment extends DefaultAttachment {
       if (getCanDieFromReachingMaxDamage()) {
         sb.append("Dies if Max Damage Reached, ");
       }
-      tuples.add(Tuple.of(sb.toString(), ""));
+      formatter.append(sb.toString(), "");
     } else if (getCanBeDamaged()) {
-      tuples.add(Tuple.of("Can be Damaged by Raids", ""));
+      formatter.append("Can be Damaged by Raids", "");
     }
 
     if (getIsAirBase() && Properties.getScrambleRulesInEffect(getData().getProperties())) {
-      tuples.add(Tuple.of("Allows Scrambling", ""));
+      formatter.append("Allows Scrambling", "");
     }
     if (getCanScramble() && Properties.getScrambleRulesInEffect(getData().getProperties())) {
-      tuples.add(
-          Tuple.of(
-              "Scramble Range",
-              String.valueOf(getMaxScrambleDistance() > 0 ? getMaxScrambleDistance() : 1)));
+      formatter.append(
+          "Scramble Range",
+          String.valueOf(getMaxScrambleDistance() > 0 ? getMaxScrambleDistance() : 1));
     }
 
     final List<UnitSupportAttachment> supports =
@@ -3408,7 +3248,7 @@ public class UnitAttachment extends DefaultAttachment {
             UnitSupportAttachment.get(unitType),
             Matches.unitSupportAttachmentCanBeUsedByPlayer(player));
     if (supports.size() > 3) {
-      tuples.add(Tuple.of("Can Provide Support to Units", ""));
+      formatter.append("Can Provide Support to Units", "");
     } else if (!supports.isEmpty()) {
       final boolean moreThanOneSupportType =
           UnitSupportAttachment.get(getData().getUnitTypeList()).size() > 1;
@@ -3442,25 +3282,25 @@ public class UnitAttachment extends DefaultAttachment {
                 + (support.getUnitType().size() > 25
                     ? "Units"
                     : MyFormatter.defaultNamedToTextList(support.getUnitType()));
-        tuples.add(Tuple.of(key, text));
+        formatter.append(key, text);
       }
     }
 
     if (getIsMarine() != 0) {
-      tuples.add(Tuple.of("Amphibious Attack Modifier", String.valueOf(getIsMarine())));
+      formatter.append("Amphibious Attack Modifier", String.valueOf(getIsMarine()));
     }
     if (getCanBlitz(player)) {
-      tuples.add(Tuple.of("Can Blitz", ""));
+      formatter.append("Can Blitz", "");
     }
 
     if (!getReceivesAbilityWhenWith().isEmpty()) {
       if (getReceivesAbilityWhenWith().size() <= 2) {
         for (final String ability : getReceivesAbilityWhenWith()) {
           final String[] s = splitOnColon(ability);
-          tuples.add(Tuple.of("Receives Ability", s[0] + " when Paired with " + s[1]));
+          formatter.append("Receives Ability", s[0] + " when Paired with " + s[1]);
         }
       } else {
-        tuples.add(Tuple.of("Receives Abilities when Paired with Other Units", ""));
+        formatter.append("Receives Abilities when Paired with Other Units", "");
       }
     }
 
@@ -3479,102 +3319,99 @@ public class UnitAttachment extends DefaultAttachment {
         sb.append("1-").append(getData().getDiceSides());
       }
       sb.append(" Damage");
-      tuples.add(Tuple.of("Can Perform Raids", sb.toString()));
+      formatter.append("Can Perform Raids", sb.toString());
     }
 
     if (getAirAttack(player) > 0
         && (getIsStrategicBomber() || getCanEscort() || getCanAirBattle())) {
-      tuples.add(
-          Tuple.of(
-              "Air Attack", (attackRolls > 1 ? (attackRolls + "x") : "") + getAirAttack(player)));
+      formatter.append(
+          "Air Attack", (attackRolls > 1 ? (attackRolls + "x") : "") + getAirAttack(player));
     }
     if (getAirDefense(player) > 0 && (getCanIntercept() || getCanAirBattle())) {
-      tuples.add(
-          Tuple.of(
-              "Air Defense",
-              (defenseRolls > 1 ? (defenseRolls + "x") : "") + getAirDefense(player)));
+      formatter.append(
+          "Air Defense", (defenseRolls > 1 ? (defenseRolls + "x") : "") + getAirDefense(player));
     }
 
     if (getCanEvade()) {
-      tuples.add(Tuple.of("Can Evade", ""));
+      formatter.append("Can Evade", "");
     }
     if (getIsFirstStrike()) {
-      tuples.add(Tuple.of("Is First Strike", ""));
+      formatter.append("Is First Strike", "");
     }
     if (getCanMoveThroughEnemies()) {
-      tuples.add(Tuple.of("Can Move Through Enemies", ""));
+      formatter.append("Can Move Through Enemies", "");
     }
     if (getCanBeMovedThroughByEnemies()) {
-      tuples.add(Tuple.of("Can Be Moved Through By Enemies", ""));
+      formatter.append("Can Be Moved Through By Enemies", "");
     }
-    addLabeledUnitTypes("Can't Target", getCanNotTarget(), tuples);
-    addLabeledUnitTypes("Can't Be Targeted By", getCanNotBeTargetedBy(), tuples);
+    addLabeledUnitTypes("Can't Target", getCanNotTarget(), formatter);
+    addLabeledUnitTypes("Can't Be Targeted By", getCanNotBeTargetedBy(), formatter);
     if (getIsDestroyer()) {
-      tuples.add(Tuple.of("Is Anti-Stealth", ""));
+      formatter.append("Is Anti-Stealth", "");
     }
 
     if (getCanBombard(player) && getBombard() > 0) {
-      tuples.add(Tuple.of("Bombard", (attackRolls > 1 ? (attackRolls + "x") : "") + getBombard()));
+      formatter.append("Bombard", (attackRolls > 1 ? (attackRolls + "x") : "") + getBombard());
     }
 
     if (getBlockade() > 0) {
-      tuples.add(Tuple.of("Blockade Loss", String.valueOf(getBlockade())));
+      formatter.append("Blockade Loss", String.valueOf(getBlockade()));
     }
 
     if (getIsSuicideOnAttack()) {
-      tuples.add(Tuple.of("Suicide on Attack Unit", ""));
+      formatter.append("Suicide on Attack Unit", "");
     }
     if (getIsSuicideOnDefense()) {
-      tuples.add(Tuple.of("Suicide on Defense Unit", ""));
+      formatter.append("Suicide on Defense Unit", "");
     }
     if (getIsSuicideOnHit()) {
-      tuples.add(Tuple.of("Suicide on Hit Unit", ""));
+      formatter.append("Suicide on Hit Unit", "");
     }
     if (getIsAir()
         && (getIsKamikaze() || Properties.getKamikazeAirplanes(getData().getProperties()))) {
-      tuples.add(Tuple.of("Is Kamikaze", "Can use all Movement to Attack Target"));
+      formatter.append("Is Kamikaze", "Can use all Movement to Attack Target");
     }
 
     if (getIsLandTransportable() && playerHasMechInf(player)) {
-      tuples.add(Tuple.of("Can be Land Transported", ""));
+      formatter.append("Can be Land Transported", "");
     }
     if (getIsLandTransport() && playerHasMechInf(player)) {
-      tuples.add(Tuple.of("Is a Land Transport", ""));
+      formatter.append("Is a Land Transport", "");
     }
     if (getIsAirTransportable() && playerHasParatroopers(player)) {
-      tuples.add(Tuple.of("Can be Air Transported", ""));
+      formatter.append("Can be Air Transported", "");
     }
     if (getIsAirTransport() && playerHasParatroopers(player)) {
-      tuples.add(Tuple.of("Is an Air Transport", ""));
+      formatter.append("Is an Air Transport", "");
     }
     if (getIsCombatTransport() && getTransportCapacity() > 0) {
-      tuples.add(Tuple.of("Is a Combat Transport", ""));
+      formatter.append("Is a Combat Transport", "");
     } else if (getTransportCapacity() > 0 && getIsSea()) {
-      tuples.add(Tuple.of("Is a Sea Transport", ""));
+      formatter.append("Is a Sea Transport", "");
     }
     if (getTransportCost() > -1) {
-      tuples.add(Tuple.of("Transporting Cost", String.valueOf(getTransportCost())));
+      formatter.append("Transporting Cost", String.valueOf(getTransportCost()));
     }
     if (getTransportCapacity() > 0
         && (getIsSea()
             || (getIsAir() && playerHasParatroopers(player))
             || (playerHasMechInf(player) && !getIsSea() && !getIsAir()))) {
-      tuples.add(Tuple.of("Transporting Capacity", String.valueOf(getTransportCapacity())));
+      formatter.append("Transporting Capacity", String.valueOf(getTransportCapacity()));
     }
 
     if (getCarrierCost() > -1) {
-      tuples.add(Tuple.of("Carrier Cost", String.valueOf(getCarrierCost())));
+      formatter.append("Carrier Cost", String.valueOf(getCarrierCost()));
     }
     if (getCarrierCapacity() > 0) {
-      tuples.add(Tuple.of("Carrier Capacity", String.valueOf(getCarrierCapacity())));
+      formatter.append("Carrier Capacity", String.valueOf(getCarrierCapacity()));
     }
 
     if (!getWhenCombatDamaged().isEmpty()) {
-      tuples.add(Tuple.of("When Hit Loses Certain Abilities", ""));
+      formatter.append("When Hit Loses Certain Abilities", "");
     }
 
     if (getMaxBuiltPerPlayer() > -1) {
-      tuples.add(Tuple.of("Max Built Allowed", String.valueOf(getMaxBuiltPerPlayer())));
+      formatter.append("Max Built Allowed", String.valueOf(getMaxBuiltPerPlayer()));
     }
 
     if (getRepairsUnits() != null
@@ -3583,12 +3420,11 @@ public class UnitAttachment extends DefaultAttachment {
         && (Properties.getBattleshipsRepairAtBeginningOfRound(getData().getProperties())
             || Properties.getBattleshipsRepairAtEndOfRound(getData().getProperties()))) {
       if (getRepairsUnits().size() <= 4) {
-        tuples.add(
-            Tuple.of(
-                "Can Repair",
-                MyFormatter.integerDefaultNamedMapToString(getRepairsUnits(), " ", "=", false)));
+        formatter.append(
+            "Can Repair",
+            MyFormatter.integerDefaultNamedMapToString(getRepairsUnits(), " ", "=", false));
       } else {
-        tuples.add(Tuple.of("Can Repair some Units", ""));
+        formatter.append("Can Repair some Units", "");
       }
     }
 
@@ -3596,27 +3432,24 @@ public class UnitAttachment extends DefaultAttachment {
         && getGivesMovement().totalValues() > 0
         && Properties.getUnitsMayGiveBonusMovement(getData().getProperties())) {
       if (getGivesMovement().size() <= 4) {
-        tuples.add(
-            Tuple.of(
-                "Can Modify Unit Movement",
-                MyFormatter.integerDefaultNamedMapToString(getGivesMovement(), " ", "=", false)));
+        formatter.append(
+            "Can Modify Unit Movement",
+            MyFormatter.integerDefaultNamedMapToString(getGivesMovement(), " ", "=", false));
       } else {
-        tuples.add(Tuple.of("Can Modify Unit Movement", ""));
+        formatter.append("Can Modify Unit Movement", "");
       }
     }
 
     if (getConsumesUnits() != null && getConsumesUnits().totalValues() == 1) {
-      tuples.add(
-          Tuple.of(
-              "Unit is an Upgrade Of", getConsumesUnits().keySet().iterator().next().getName()));
+      formatter.append(
+          "Unit is an Upgrade Of", CollectionUtils.getAny(getConsumesUnits().keySet()).getName());
     } else if (getConsumesUnits() != null && getConsumesUnits().totalValues() > 0) {
       if (getConsumesUnits().size() <= 4) {
-        tuples.add(
-            Tuple.of(
-                "Unit Consumes on Placement",
-                MyFormatter.integerDefaultNamedMapToString(getConsumesUnits(), " ", "x", true)));
+        formatter.append(
+            "Unit Consumes on Placement",
+            MyFormatter.integerDefaultNamedMapToString(getConsumesUnits(), " ", "x", true));
       } else {
-        tuples.add(Tuple.of("Unit Consumes Other Units on Placement", ""));
+        formatter.append("Unit Consumes Other Units on Placement", "");
       }
     }
 
@@ -3628,9 +3461,9 @@ public class UnitAttachment extends DefaultAttachment {
         totalUnitsListed.addAll(List.of(list));
       }
       if (totalUnitsListed.size() > 4) {
-        tuples.add(Tuple.of("Has Placement Requirements", ""));
+        formatter.append("Has Placement Requirements", "");
       } else {
-        tuples.add(Tuple.of("Placement Requirements", joinRequiredUnits(getRequiresUnits())));
+        formatter.append("Placement Requirements", joinRequiredUnits(getRequiresUnits()));
       }
     }
 
@@ -3640,114 +3473,70 @@ public class UnitAttachment extends DefaultAttachment {
         totalUnitsListed.addAll(List.of(list));
       }
       if (totalUnitsListed.size() > 4) {
-        tuples.add(Tuple.of("Has Movement Requirements", ""));
+        formatter.append("Has Movement Requirements", "");
       } else {
-        tuples.add(Tuple.of("Movement Requirements", joinRequiredUnits(getRequiresUnitsToMove())));
+        formatter.append("Movement Requirements", joinRequiredUnits(getRequiresUnitsToMove()));
       }
     }
 
     if (getUnitPlacementRestrictions() != null
         && Properties.getUnitPlacementRestrictions(getData().getProperties())) {
       if (getUnitPlacementRestrictions().length > 4) {
-        tuples.add(Tuple.of("Has Placement Restrictions", ""));
+        formatter.append("Has Placement Restrictions", "");
       } else {
-        tuples.add(
-            Tuple.of("Placement Restrictions", Arrays.toString(getUnitPlacementRestrictions())));
+        formatter.append("Placement Restrictions", Arrays.toString(getUnitPlacementRestrictions()));
       }
     }
     if (getCanOnlyBePlacedInTerritoryValuedAtX() > 0
         && Properties.getUnitPlacementRestrictions(getData().getProperties())) {
-      tuples.add(
-          Tuple.of(
-              "Must be Placed in Territory with Value of at Least",
-              String.valueOf(getCanOnlyBePlacedInTerritoryValuedAtX())));
+      formatter.append(
+          "Must be Placed in Territory with Value of at Least",
+          String.valueOf(getCanOnlyBePlacedInTerritoryValuedAtX()));
     }
 
     if (getCanNotMoveDuringCombatMove()) {
-      tuples.add(Tuple.of("Cannot Combat Move", ""));
+      formatter.append("Cannot Combat Move", "");
     }
 
-    if (getMovementLimit() != null) {
-      if (getMovementLimit().getFirst() == Integer.MAX_VALUE
-          && (getIsAaForBombingThisUnitOnly() || getIsAaForCombatOnly())
-          && !(Properties.getWW2V2(getData().getProperties())
-              || Properties.getWW2V3(getData().getProperties())
-              || Properties.getMultipleAaPerTerritory(getData().getProperties()))) {
-        tuples.add(
-            Tuple.of("Max " + getMovementLimit().getSecond() + " Units Moving per Territory", "1"));
-      } else if (getMovementLimit().getFirst() < 10000) {
-        tuples.add(
-            Tuple.of(
-                "Max " + getMovementLimit().getSecond() + " Units Moving per Territory",
-                String.valueOf(getMovementLimit().getFirst())));
-      }
-    }
+    addStackingLimitDescription(movementLimit, "Moving", formatter);
+    addStackingLimitDescription(attackingLimit, "Attacking", formatter);
+    addStackingLimitDescription(placementLimit, "Placed", formatter);
 
-    if (getAttackingLimit() != null) {
-      if (getAttackingLimit().getFirst() == Integer.MAX_VALUE
-          && (getIsAaForBombingThisUnitOnly() || getIsAaForCombatOnly())
-          && !(Properties.getWW2V2(getData().getProperties())
-              || Properties.getWW2V3(getData().getProperties())
-              || Properties.getMultipleAaPerTerritory(getData().getProperties()))) {
-        tuples.add(
-            Tuple.of(
-                "Max " + getAttackingLimit().getSecond() + " Units Attacking per Territory", "1"));
-      } else if (getAttackingLimit().getFirst() < 10000) {
-        tuples.add(
-            Tuple.of(
-                "Max " + getAttackingLimit().getSecond() + " Units Attacking per Territory",
-                String.valueOf(getAttackingLimit().getFirst())));
-      }
-    }
+    return formatter.toString();
+  }
 
-    if (getPlacementLimit() != null) {
-      if (getPlacementLimit().getFirst() == Integer.MAX_VALUE
-          && (getIsAaForBombingThisUnitOnly() || getIsAaForCombatOnly())
-          && !(Properties.getWW2V2(getData().getProperties())
-              || Properties.getWW2V3(getData().getProperties())
-              || Properties.getMultipleAaPerTerritory(getData().getProperties()))) {
-        tuples.add(
-            Tuple.of(
-                "Max " + getPlacementLimit().getSecond() + " Units Placed per Territory", "1"));
-      } else if (getPlacementLimit().getFirst() < 10000) {
-        tuples.add(
-            Tuple.of(
-                "Max " + getPlacementLimit().getSecond() + " Units Placed per Territory",
-                String.valueOf(getPlacementLimit().getFirst())));
-      }
-    }
+  private static class Formatter {
+    private final StringBuilder sb = new StringBuilder();
 
-    final StringBuilder result = new StringBuilder();
-    for (final Tuple<String, String> tuple : tuples) {
-      result.append(tuple.getFirst());
-      if (!tuple.getSecond().isEmpty()) {
-        result
-            .append(": <b>")
-            .append(
-                MyFormatter.addHtmlBreaksAndIndents(
-                    tuple.getSecond(), 100 - tuple.getFirst().length(), 100))
+    void append(final String first, final String second) {
+      sb.append(first);
+      if (!second.isEmpty()) {
+        sb.append(": <b>")
+            .append(MyFormatter.addHtmlBreaksAndIndents(second, 100 - second.length(), 100))
             .append("</b>");
       }
-      result.append("<br />");
+      sb.append("<br />");
     }
-    return result.toString();
+
+    @Override
+    public String toString() {
+      return sb.toString();
+    }
   }
 
   private void addLabeledUnitTypes(
-      final String label,
-      final Collection<UnitType> unitTypes,
-      final List<Tuple<String, String>> tuples) {
+      final String label, final Collection<UnitType> unitTypes, final Formatter formatter) {
     if (!unitTypes.isEmpty()) {
       if (unitTypes.size() <= 4) {
-        tuples.add(Tuple.of(label, MyFormatter.defaultNamedToTextList(unitTypes)));
+        formatter.append(label, MyFormatter.defaultNamedToTextList(unitTypes));
       } else {
-        tuples.add(Tuple.of(label + " Some Units", ""));
+        formatter.append(label + " Some Units", "");
       }
     }
   }
 
   private static <T extends DefaultNamed> void addIntegerMapDescription(
-      final String key, final IntegerMap<T> integerMap, final List<Tuple<String, String>> tuples) {
+      final String key, final IntegerMap<T> integerMap, final Formatter formatter) {
     if (integerMap != null && !integerMap.isEmpty()) {
       final StringBuilder sb = new StringBuilder();
       if (integerMap.size() > 4) {
@@ -3757,15 +3546,12 @@ public class UnitAttachment extends DefaultAttachment {
           sb.append(entry.getValue()).append("x").append(entry.getKey().getName()).append(" ");
         }
       }
-      tuples.add(Tuple.of(key, sb.toString()));
+      formatter.append(key, sb.toString());
     }
   }
 
   private void addAaDescription(
-      final String startOfKey,
-      final int aa,
-      final int aaMaxDieSides,
-      final List<Tuple<String, String>> tuples) {
+      final String startOfKey, final int aa, final int aaMaxDieSides, final Formatter formatter) {
     if ((getIsAaForCombatOnly() || getIsAaForBombingThisUnitOnly() || getIsAaForFlyOverOnly())
         && (aa > 0)) {
       final String string =
@@ -3779,7 +3565,27 @@ public class UnitAttachment extends DefaultAttachment {
               + " Attacks for "
               + (getMaxRoundsAa() > -1 ? getMaxRoundsAa() : "Unlimited")
               + " Rounds";
-      tuples.add(Tuple.of(startOfKey + getAaKey(), string));
+      formatter.append(startOfKey + getAaKey(), string);
+    }
+  }
+
+  private void addStackingLimitDescription(
+      final Tuple<Integer, String> stackingLimit,
+      final String description,
+      final Formatter formatter) {
+    if (stackingLimit != null) {
+      if (stackingLimit.getFirst() == Integer.MAX_VALUE
+          && (getIsAaForBombingThisUnitOnly() || getIsAaForCombatOnly())
+          && !(Properties.getWW2V2(getData().getProperties())
+              || Properties.getWW2V3(getData().getProperties())
+              || Properties.getMultipleAaPerTerritory(getData().getProperties()))) {
+        formatter.append(
+            "Max " + stackingLimit.getSecond() + " Units " + description + " per Territory", "1");
+      } else if (stackingLimit.getFirst() < 10000) {
+        formatter.append(
+            "Max " + stackingLimit.getSecond() + " Units " + description + " per Territory",
+            String.valueOf(stackingLimit.getFirst()));
+      }
     }
   }
 

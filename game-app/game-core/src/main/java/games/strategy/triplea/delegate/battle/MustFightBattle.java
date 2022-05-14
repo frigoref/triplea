@@ -270,8 +270,8 @@ public class MustFightBattle extends DependentBattle
         CollectionUtils.getMatches(
             unitsLeftInTerritory,
             getWhoWon() != WhoWon.DEFENDER
-                ? Matches.unitOwnedBy(attacker)
-                : Matches.unitOwnedBy(attacker)
+                ? Matches.unitIsOwnedBy(attacker)
+                : Matches.unitIsOwnedBy(attacker)
                     .and(Matches.unitIsAir())
                     .and(Matches.unitIsNotInfrastructure())));
     return new ArrayList<>(remaining);
@@ -861,8 +861,7 @@ public class MustFightBattle extends DependentBattle
 
     // the air unit may have come from a conquered or enemy territory, don't allow retreating
     final Predicate<Territory> conqueuredOrEnemy =
-        Matches.isTerritoryEnemyAndNotUnownedWaterOrImpassableOrRestricted(
-                attacker, gameData.getProperties(), gameData.getRelationshipTracker())
+        Matches.isTerritoryEnemyAndNotUnownedWaterOrImpassableOrRestricted(attacker)
             .or(Matches.territoryIsWater().and(Matches.territoryWasFoughtOver(battleTracker)));
     possible.removeAll(CollectionUtils.getMatches(possible, conqueuredOrEnemy));
 

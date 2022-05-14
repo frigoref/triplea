@@ -11,6 +11,7 @@ import games.strategy.engine.data.UnitType;
 import games.strategy.triplea.Properties;
 import games.strategy.triplea.delegate.Matches;
 import games.strategy.triplea.image.MapImage;
+import games.strategy.triplea.image.UnitImageFactory;
 import games.strategy.triplea.settings.ClientSetting;
 import games.strategy.triplea.ui.UiContext;
 import games.strategy.triplea.ui.mapdata.MapData;
@@ -22,10 +23,7 @@ import java.awt.Point;
 import java.awt.Rectangle;
 import java.awt.RenderingHints;
 import java.util.List;
-import java.util.Optional;
 import java.util.function.Predicate;
-import lombok.extern.slf4j.Slf4j;
-import org.triplea.util.Tuple;
 
 /**
  * Draws units for the associated territory.
@@ -34,7 +32,6 @@ import org.triplea.util.Tuple;
  * horizontal row, overflowing to the right of the territory. A solid black line, rooted at the
  * territory's default placement point, will be drawn under all units in this case.
  */
-@Slf4j
 public class UnitsDrawer extends AbstractDrawable {
   private final int count;
   private final String unitType;
@@ -51,12 +48,7 @@ public class UnitsDrawer extends AbstractDrawable {
   public enum UnitFlagDrawMode {
     NONE,
     SMALL_FLAG,
-    LARGE_FLAG;
-
-    public UnitFlagDrawMode nextDrawMode() {
-      final var values = values();
-      return values[(ordinal() + 1) % values.length];
-    }
+    LARGE_FLAG,
   }
 
   public UnitsDrawer(
@@ -84,6 +76,15 @@ public class UnitsDrawer extends AbstractDrawable {
 
   public Point getPlacementPoint() {
     return placementPoint;
+  }
+
+  public Rectangle getPlacementRectangle() {
+    UnitImageFactory factory = uiContext.getUnitImageFactory();
+    return new Rectangle(
+        placementPoint.x,
+        placementPoint.y,
+        factory.getUnitImageWidth(),
+        factory.getUnitImageHeight());
   }
 
   public String getPlayer() {
@@ -122,55 +123,44 @@ public class UnitsDrawer extends AbstractDrawable {
             .disabled(disabled)
             .build();
 
-    final Optional<Image> img = uiContext.getUnitImageFactory().getImage(imageKey);
-    if (img.isEmpty() && !uiContext.isShutDown()) {
-      final String imageName = imageKey.getBaseImageName();
-      log.error(
-          "MISSING UNIT IMAGE (won't be displayed): "
-              + imageName
-              + ", "
-              + imageKey
-              + ", in "
-              + territoryName);
-    }
+    final Image img = uiContext.getUnitImageFactory().getImage(imageKey);
 
     final int maxRange = new Unit(type, owner, data).getMaxMovementAllowed();
 
     final UnitFlagDrawMode drawMode =
         ClientSetting.unitFlagDrawMode.getValue().orElse(UnitFlagDrawMode.NONE);
-    if (img.isPresent()) {
-      if (drawMode == UnitFlagDrawMode.LARGE_FLAG) {
-        // If unit is not in the "excluded list" it will get drawn
-        if (maxRange != 0) {
-          final Image flag = uiContext.getFlagImageFactory().getFlag(owner);
-          final int xoffset = img.get().getWidth(null) / 2 - flag.getWidth(null) / 2;
-          final int yoffset = img.get().getHeight(null) / 2 - flag.getHeight(null) / 4 - 5;
-          graphics.drawImage(
-              flag,
-              (placementPoint.x - bounds.x) + xoffset,
-              (placementPoint.y - bounds.y) + yoffset,
-              null);
-        }
-        drawUnit(graphics, img.get(), bounds);
-      } else if (drawMode == UnitFlagDrawMode.SMALL_FLAG) {
-        drawUnit(graphics, img.get(), bounds);
-        // If unit is not in the "excluded list" it will get drawn
-        if (maxRange != 0) {
-          final Image flag = uiContext.getFlagImageFactory().getSmallFlag(owner);
-          final int xoffset = img.get().getWidth(null) - flag.getWidth(null);
-          final int yoffset = img.get().getHeight(null) - flag.getHeight(null);
-          // This Method draws the Flag in the lower right corner of the unit image. Since the
-          // position is the upper
-          // left corner we have to move the picture up by the height and left by the width.
-          graphics.drawImage(
-              flag,
-              (placementPoint.x - bounds.x) + xoffset,
-              (placementPoint.y - bounds.y) + yoffset,
-              null);
-        }
-      } else {
-        drawUnit(graphics, img.get(), bounds);
+
+    if (drawMode == UnitFlagDrawMode.LARGE_FLAG) {
+      // If unit is not in the "excluded list" it will get drawn
+      if (maxRange != 0) {
+        final Image flag = uiContext.getFlagImageFactory().getFlag(owner);
+        final int xoffset = img.getWidth(null) / 2 - flag.getWidth(null) / 2;
+        final int yoffset = img.getHeight(null) / 2 - flag.getHeight(null) / 4 - 5;
+        graphics.drawImage(
+            flag,
+            (placementPoint.x - bounds.x) + xoffset,
+            (placementPoint.y - bounds.y) + yoffset,
+            null);
       }
+      drawUnit(graphics, img, bounds);
+    } else if (drawMode == UnitFlagDrawMode.SMALL_FLAG) {
+      drawUnit(graphics, img, bounds);
+      // If unit is not in the "excluded list" it will get drawn
+      if (maxRange != 0) {
+        final Image flag = uiContext.getFlagImageFactory().getSmallFlag(owner);
+        final int xoffset = img.getWidth(null) - flag.getWidth(null);
+        final int yoffset = img.getHeight(null) - flag.getHeight(null);
+        // This Method draws the Flag in the lower right corner of the unit image. Since the
+        // position is the upper
+        // left corner we have to move the picture up by the height and left by the width.
+        graphics.drawImage(
+            flag,
+            (placementPoint.x - bounds.x) + xoffset,
+            (placementPoint.y - bounds.y) + yoffset,
+            null);
+      }
+    } else {
+      drawUnit(graphics, img, bounds);
     }
 
     // more then 1 unit of this category
@@ -178,13 +168,8 @@ public class UnitsDrawer extends AbstractDrawable {
       final int stackSize = mapData.getDefaultUnitsStackSize();
       if (stackSize > 0) { // Display more units as a stack
         for (int i = 1; i < count && i < stackSize; i++) {
-          if (img.isPresent()) {
-            graphics.drawImage(
-                img.get(),
-                placementPoint.x + 2 * i - bounds.x,
-                placementPoint.y - 2 * i - bounds.y,
-                null);
-          }
+          graphics.drawImage(
+              img, placementPoint.x + 2 * i - bounds.x, placementPoint.y - 2 * i - bounds.y, null);
         }
         if (count > stackSize) {
           final String s = String.valueOf(count);
@@ -293,7 +278,7 @@ public class UnitsDrawer extends AbstractDrawable {
     }
   }
 
-  Tuple<Territory, List<Unit>> getUnits(final GameState data) {
+  List<Unit> getUnits(final GameState data) {
     // note - it may be the case where the territory is being changed as a result to a mouse click,
     // and the map units
     // haven't updated yet, so the unit count from the territory wont match the units in count
@@ -308,7 +293,11 @@ public class UnitsDrawer extends AbstractDrawable {
                 bombingUnitDamage > 0
                     ? Matches.unitHasTakenSomeBombingUnitDamage()
                     : Matches.unitHasNotTakenAnyBombingUnitDamage());
-    return Tuple.of(t, t.getUnitCollection().getMatches(selectedUnits));
+    return t.getUnitCollection().getMatches(selectedUnits);
+  }
+
+  public Territory getTerritory(GameData data) {
+    return data.getMap().getTerritory(territoryName);
   }
 
   @Override

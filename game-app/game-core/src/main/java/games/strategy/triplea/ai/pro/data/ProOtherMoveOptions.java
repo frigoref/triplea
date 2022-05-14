@@ -13,6 +13,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import org.triplea.java.collections.CollectionUtils;
 
 /** The result of an AI movement analysis for another player's possible moves. */
 public class ProOtherMoveOptions {
@@ -61,17 +62,14 @@ public class ProOtherMoveOptions {
     final List<GamePlayer> players = ProUtils.getOtherPlayersInTurnOrder(player);
     for (final Map<Territory, ProTerritory> moveMap : moveMaps) {
       for (final Territory t : moveMap.keySet()) {
-
+        final ProTerritory proTerritory = moveMap.get(t);
         // Get current player
-        final Set<Unit> currentUnits = new HashSet<>(moveMap.get(t).getMaxUnits());
-        currentUnits.addAll(moveMap.get(t).getMaxAmphibUnits());
-        final GamePlayer movePlayer;
-        if (!currentUnits.isEmpty()) {
-          movePlayer = currentUnits.iterator().next().getOwner();
-        } else {
+        final Set<Unit> currentUnits = new HashSet<>(proTerritory.getMaxUnits());
+        currentUnits.addAll(proTerritory.getMaxAmphibUnits());
+        if (currentUnits.isEmpty()) {
           continue;
         }
-
+        final GamePlayer movePlayer = CollectionUtils.getAny(currentUnits).getOwner();
         // Skip if checking allied moves and their turn doesn't come before territory owner's
         if (proData.getData().getRelationshipTracker().isAllied(player, movePlayer)
             && !ProUtils.isPlayersTurnFirst(players, movePlayer, t.getOwner())) {
@@ -80,25 +78,23 @@ public class ProOtherMoveOptions {
 
         // Add to max move map if its empty or its strength is greater than existing
         if (!result.containsKey(t)) {
-          result.put(t, moveMap.get(t));
+          result.put(t, proTerritory);
         } else {
-          final Set<Unit> maxUnits = new HashSet<>(result.get(t).getMaxUnits());
-          maxUnits.addAll(result.get(t).getMaxAmphibUnits());
+          final ProTerritory proResult = result.get(t);
+          final Set<Unit> maxUnits = new HashSet<>(proResult.getMaxUnits());
+          maxUnits.addAll(proResult.getMaxAmphibUnits());
           double maxStrength = 0;
           if (!maxUnits.isEmpty()) {
-            maxStrength =
-                ProBattleUtils.estimateStrength(
-                    t, new ArrayList<>(maxUnits), new ArrayList<>(), isAttacker);
+            maxStrength = ProBattleUtils.estimateStrength(t, maxUnits, List.of(), isAttacker);
           }
           final double currentStrength =
-              ProBattleUtils.estimateStrength(
-                  t, new ArrayList<>(currentUnits), new ArrayList<>(), isAttacker);
+              ProBattleUtils.estimateStrength(t, currentUnits, List.of(), isAttacker);
           final boolean currentHasLandUnits = currentUnits.stream().anyMatch(Matches.unitIsLand());
           final boolean maxHasLandUnits = maxUnits.stream().anyMatch(Matches.unitIsLand());
           if ((currentHasLandUnits
                   && ((!maxHasLandUnits && !t.isWater()) || currentStrength > maxStrength))
               || ((!maxHasLandUnits || t.isWater()) && currentStrength > maxStrength)) {
-            result.put(t, moveMap.get(t));
+            result.put(t, proTerritory);
           }
         }
       }
@@ -108,17 +104,10 @@ public class ProOtherMoveOptions {
 
   private static Map<Territory, List<ProTerritory>> newMoveMaps(
       final List<Map<Territory, ProTerritory>> moveMapList) {
-
     final Map<Territory, List<ProTerritory>> result = new HashMap<>();
     for (final Map<Territory, ProTerritory> moveMap : moveMapList) {
       for (final Territory t : moveMap.keySet()) {
-        if (!result.containsKey(t)) {
-          final List<ProTerritory> list = new ArrayList<>();
-          list.add(moveMap.get(t));
-          result.put(t, list);
-        } else {
-          result.get(t).add(moveMap.get(t));
-        }
+        result.computeIfAbsent(t, key -> new ArrayList<>()).add(moveMap.get(t));
       }
     }
     return result;
