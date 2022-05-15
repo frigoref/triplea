@@ -9,7 +9,7 @@ import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.triplea.java.Interruptibles;
 
-public class ThreadPoolTest {
+class ThreadPoolTest {
 
   @Test
   void testThrowsExceptionOnInvalidArgument() {
@@ -20,18 +20,30 @@ public class ThreadPoolTest {
 
   @Test
   void testRunOneTask() {
+    final int maxThreadCount = 50;
+    final int taskCount = 1;
+    runTasksWithThreadPool(maxThreadCount, taskCount);
     final ThreadPool pool = new ThreadPool(50);
-    final Task task = new Task();
-    pool.submit(task);
-    pool.waitForAll();
-    assertTrue(task.isDone());
   }
 
   @Test
   void testSingleThread() {
-    final ThreadPool pool = new ThreadPool(1);
+    final int maxThreadCount = 1;
+    final int taskCount = 20;
+    runTasksWithThreadPool(maxThreadCount, taskCount);
+  }
+
+  @Test
+  void testSimple() {
+    final int maxThreadCount = 5;
+    final int taskCount = 100;
+    runTasksWithThreadPool(5, 100);
+  }
+
+  private void runTasksWithThreadPool(final int maxThreadCount, final int taskCount) {
+    final ThreadPool pool = new ThreadPool(maxThreadCount);
     final Collection<Task> tasks = new ArrayList<>();
-    for (int i = 0; i < 30; i++) {
+    for (int i = 0; i < taskCount; i++) {
       final Task task = new Task();
       tasks.add(task);
       pool.submit(task);
@@ -39,23 +51,6 @@ public class ThreadPoolTest {
     pool.waitForAll();
     for (final Task runnable : tasks) {
       assertTrue(runnable.isDone());
-    }
-    pool.shutdown();
-  }
-
-  @Test
-  void testSimple() {
-    final ThreadPool pool = new ThreadPool(5);
-    final Collection<Task> tasks = new ArrayList<>();
-    for (int i = 0; i < 3000; i++) {
-      final Task task = new Task();
-      tasks.add(task);
-      pool.submit(task);
-    }
-
-    pool.waitForAll();
-    for (final Task task1 : tasks) {
-      assertTrue(task1.isDone());
     }
     pool.shutdown();
   }
