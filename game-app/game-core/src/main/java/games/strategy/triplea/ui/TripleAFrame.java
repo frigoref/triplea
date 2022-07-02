@@ -36,7 +36,7 @@ import games.strategy.engine.framework.startup.ui.panels.main.game.selector.Game
 import games.strategy.engine.history.HistoryNode;
 import games.strategy.engine.history.Round;
 import games.strategy.engine.history.Step;
-import games.strategy.engine.player.IPlayerBridge;
+import games.strategy.engine.player.PlayerBridge;
 import games.strategy.engine.random.PbemDiceRoller;
 import games.strategy.triplea.EngineImageLoader;
 import games.strategy.triplea.Properties;
@@ -141,7 +141,6 @@ import javax.swing.border.EmptyBorder;
 import javax.swing.tree.DefaultMutableTreeNode;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
-import org.triplea.config.product.ProductVersionReader;
 import org.triplea.java.Interruptibles;
 import org.triplea.java.ThreadRunner;
 import org.triplea.java.collections.CollectionUtils;
@@ -625,7 +624,7 @@ public final class TripleAFrame extends JFrame implements QuitHandler {
 
   public MoveDescription getMove(
       final GamePlayer player,
-      final IPlayerBridge bridge,
+      final PlayerBridge bridge,
       final boolean nonCombat,
       final String stepName) {
     messageAndDialogThreadPool.waitForAll();
@@ -648,13 +647,13 @@ public final class TripleAFrame extends JFrame implements QuitHandler {
   }
 
   public PlaceData waitForPlace(
-      final GamePlayer player, final boolean bid, final IPlayerBridge bridge) {
+      final GamePlayer player, final boolean bid, final PlayerBridge bridge) {
     messageAndDialogThreadPool.waitForAll();
     actionButtons.changeToPlace(player);
     return actionButtons.waitForPlace(bid, bridge);
   }
 
-  public void waitForMoveForumPoster(final GamePlayer player, final IPlayerBridge bridge) {
+  public void waitForMoveForumPoster(final GamePlayer player, final PlayerBridge bridge) {
     if (actionButtons == null) {
       return;
     }
@@ -662,7 +661,7 @@ public final class TripleAFrame extends JFrame implements QuitHandler {
     actionButtons.waitForMoveForumPosterPanel(this, bridge);
   }
 
-  public void waitForEndTurn(final GamePlayer player, final IPlayerBridge bridge) {
+  public void waitForEndTurn(final GamePlayer player, final PlayerBridge bridge) {
     if (actionButtons == null) {
       return;
     }
@@ -1860,9 +1859,7 @@ public final class TripleAFrame extends JFrame implements QuitHandler {
                     try (OutputStream fileOutputStream = Files.newOutputStream(f.get())) {
                       final GameData datacopy =
                           GameDataUtils.cloneGameData(
-                                  data,
-                                  GameDataManager.Options.withEverything(),
-                                  ProductVersionReader.getCurrentVersion())
+                                  data, GameDataManager.Options.withEverything())
                               .orElse(null);
                       if (datacopy != null) {
                         datacopy
@@ -1897,8 +1894,7 @@ public final class TripleAFrame extends JFrame implements QuitHandler {
                         datacopy
                             .getSequence()
                             .setRoundAndStep(round, stepDisplayName, currentPlayer);
-                        GameDataManager.saveGame(
-                            fileOutputStream, datacopy, ProductVersionReader.getCurrentVersion());
+                        GameDataManager.saveGame(fileOutputStream, datacopy);
                         JOptionPane.showMessageDialog(
                             TripleAFrame.this,
                             "Game Saved",
