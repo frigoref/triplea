@@ -9,20 +9,22 @@ import games.strategy.engine.data.Territory;
 import games.strategy.engine.data.Unit;
 import games.strategy.triplea.ai.AiUtils;
 import games.strategy.triplea.ai.pro.ProData;
+import games.strategy.triplea.ai.pro.data.ProBattleResult;
 import games.strategy.triplea.ai.pro.data.ProPurchaseOption;
 import games.strategy.triplea.ai.pro.data.ProTerritory;
-import games.strategy.triplea.attachments.TechAttachment;
+import games.strategy.triplea.ai.pro.logging.ProLogger;
 import games.strategy.triplea.attachments.UnitAttachment;
 import games.strategy.triplea.attachments.UnitSupportAttachment;
 import games.strategy.triplea.delegate.Matches;
-import games.strategy.triplea.delegate.TransportTracker;
 import games.strategy.triplea.delegate.move.validation.AirMovementValidator;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
@@ -51,35 +53,29 @@ public final class ProTransportUtils {
   public static List<Unit> getUnitsToTransportThatCantMoveToHigherValue(
       final GamePlayer player,
       final Unit transport,
+      final ProData proData,
       final Set<Territory> territoriesToLoadFrom,
       final Collection<Unit> unitsToIgnore,
       final Map<Territory, ProTerritory> moveMap,
       final Map<Unit, Set<Territory>> unitMoveMap,
       final double value) {
-
     final List<Unit> unitsToIgnoreOrHaveBetterLandMove = new ArrayList<>(unitsToIgnore);
-    if (!TransportTracker.isTransporting(transport)) {
-
+    if (!transport.isTransporting(proData.getUnitTerritory(transport))) {
       // Get all units that can be transported
+      Predicate<Unit> canBeLoaded =
+          ProMatches.unitIsOwnedTransportableUnitAndCanBeLoaded(player, transport, true);
       final List<Unit> units = new ArrayList<>();
       for (final Territory loadFrom : territoriesToLoadFrom) {
-        units.addAll(
-            loadFrom
-                .getUnitCollection()
-                .getMatches(
-                    ProMatches.unitIsOwnedTransportableUnitAndCanBeLoaded(
-                        player, transport, true)));
+        units.addAll(loadFrom.getUnitCollection().getMatches(canBeLoaded));
       }
       units.removeAll(unitsToIgnore);
 
       // Check to see which have higher land move value
       for (final Unit u : units) {
-        if (unitMoveMap.get(u) != null) {
-          for (final Territory t : unitMoveMap.get(u)) {
-            if (moveMap.get(t) != null && moveMap.get(t).getValue() > value) {
-              unitsToIgnoreOrHaveBetterLandMove.add(u);
-              break;
-            }
+        for (final Territory t : Optional.ofNullable(unitMoveMap.get(u)).orElse(Set.of())) {
+          if (moveMap.get(t) != null && moveMap.get(t).getValue() > value) {
+            unitsToIgnoreOrHaveBetterLandMove.add(u);
+            break;
           }
         }
       }
@@ -109,41 +105,38 @@ public final class ProTransportUtils {
       final Set<Territory> territoriesToLoadFrom,
       final Collection<Unit> unitsToIgnore,
       final Predicate<Unit> validUnitMatch) {
-    final List<Unit> selectedUnits = new ArrayList<>();
+    final List<Unit> transporting = transport.getTransporting();
+    if (!transporting.isEmpty()) {
+      return transporting;
+    }
 
     // Get units if transport already loaded
-    if (TransportTracker.isTransporting(transport)) {
-      selectedUnits.addAll(transport.getTransporting());
-    } else {
-
-      // Get all units that can be transported
-      final List<Unit> units = new ArrayList<>();
-      for (final Territory loadFrom : territoriesToLoadFrom) {
-        units.addAll(loadFrom.getUnitCollection().getMatches(validUnitMatch));
-      }
-      units.removeAll(unitsToIgnore);
-
-      // Sort units by attack
-      units.sort(
-          Comparator.<Unit>comparingInt(u -> UnitAttachment.get(u.getType()).getTransportCost())
-              .thenComparing(getDecreasingAttackComparator(player)));
-
-      // Get best units that can be loaded
-      selectedUnits.addAll(selectUnitsToTransportFromList(transport, units));
+    // Get all units that can be transported
+    final List<Unit> units = new ArrayList<>();
+    for (final Territory loadFrom : territoriesToLoadFrom) {
+      units.addAll(loadFrom.getUnitCollection().getMatches(validUnitMatch));
     }
-    return selectedUnits;
+    units.removeAll(unitsToIgnore);
+
+    // Sort units by attack
+    units.sort(
+        Comparator.<Unit>comparingInt(u -> u.getUnitAttachment().getTransportCost())
+            .thenComparing(getDecreasingAttackComparator(player)));
+
+    // Get best units that can be loaded
+    return selectUnitsToTransportFromList(transport, units);
   }
 
   /** Selects the best units to load on the transport from the given list. */
   public static List<Unit> selectUnitsToTransportFromList(
       final Unit transport, final List<Unit> units) {
     final List<Unit> selectedUnits = new ArrayList<>();
-    final int capacity = UnitAttachment.get(transport.getType()).getTransportCapacity();
+    final int capacity = transport.getUnitAttachment().getTransportCapacity();
     int capacityCount = 0;
 
     // Load as many units as possible
     for (final Unit unit : units) {
-      final int cost = UnitAttachment.get(unit.getType()).getTransportCost();
+      final int cost = unit.getUnitAttachment().getTransportCost();
       if (cost <= (capacity - capacityCount)) {
         selectedUnits.add(unit);
         capacityCount += cost;
@@ -156,7 +149,7 @@ public final class ProTransportUtils {
     // If extra space try to replace last unit with stronger unit
     if (!selectedUnits.isEmpty() && capacityCount < capacity) {
       final Unit lastUnit = selectedUnits.get(selectedUnits.size() - 1);
-      final int lastUnitCost = UnitAttachment.get(lastUnit.getType()).getTransportCost();
+      final int lastUnitCost = lastUnit.getUnitAttachment().getTransportCost();
       units.removeAll(selectedUnits);
       final Comparator<Unit> comparator;
       if (Matches.unitIsLandTransport().test(transport)) {
@@ -171,7 +164,7 @@ public final class ProTransportUtils {
         if (comparator.compare(unit, lastUnit) >= 0) {
           break;
         }
-        final int cost = UnitAttachment.get(unit.getType()).getTransportCost();
+        final int cost = unit.getUnitAttachment().getTransportCost();
         if (capacityCount - lastUnitCost + cost <= capacity) {
           selectedUnits.remove(lastUnit);
           selectedUnits.add(unit);
@@ -185,7 +178,7 @@ public final class ProTransportUtils {
   public static int findUnitsTransportCost(final List<Unit> units) {
     int transportCost = 0;
     for (final Unit unit : units) {
-      transportCost += UnitAttachment.get(unit.getType()).getTransportCost();
+      transportCost += unit.getUnitAttachment().getTransportCost();
     }
     return transportCost;
   }
@@ -200,13 +193,13 @@ public final class ProTransportUtils {
       final Unit unit,
       final List<Unit> alreadyMovedUnits,
       final Map<Territory, ProTerritory> moveMap) {
-    final List<Unit> movedUnits = getMovedUnits(alreadyMovedUnits, moveMap);
+    final Set<Unit> movedUnits = getMovedUnits(alreadyMovedUnits, moveMap);
     return findBestUnitsToLandTransport(unit, proData.getUnitTerritory(unit), movedUnits);
   }
 
-  public static List<Unit> getMovedUnits(
+  public static Set<Unit> getMovedUnits(
       final List<Unit> alreadyMovedUnits, final Map<Territory, ProTerritory> attackMap) {
-    final List<Unit> movedUnits = new ArrayList<>(alreadyMovedUnits);
+    final Set<Unit> movedUnits = new HashSet<>(alreadyMovedUnits);
     movedUnits.addAll(
         attackMap.values().stream()
             .map(ProTerritory::getAllDefenders)
@@ -216,15 +209,20 @@ public final class ProTransportUtils {
   }
 
   /**
-   * Check if unit is can land transport and if there are any unused units that could be
-   * transported.
+   * Check if unit is a land transport and if there are any unused units that could be transported.
    */
   public static List<Unit> findBestUnitsToLandTransport(
-      final Unit unit, final Territory t, final List<Unit> usedUnits) {
+      final Unit unit, final Territory t, final Set<Unit> usedUnits) {
     if (usedUnits.contains(unit)) {
+      // Can't even move this unit.
       return List.of();
     }
     final GamePlayer player = unit.getOwner();
+    if (!Matches.unitIsLandTransport().test(unit)
+        || !player.getTechAttachment().getMechanizedInfantry()) {
+      // This unit can't transport anything else.
+      return List.of(unit);
+    }
     final List<Unit> units =
         t.getUnitCollection()
             .getMatches(
@@ -232,9 +230,7 @@ public final class ProTransportUtils {
                     .and(Matches.unitIsLandTransportable())
                     .and(ProMatches.unitHasLessMovementThan(unit)));
     units.removeAll(usedUnits);
-    if (Matches.unitIsLandTransport().negate().test(unit)
-        || !TechAttachment.isMechanizedInfantry(player)
-        || units.isEmpty()) {
+    if (units.isEmpty()) {
       return List.of(unit);
     }
     final List<Unit> results = new ArrayList<>();
@@ -247,7 +243,7 @@ public final class ProTransportUtils {
     } else {
       units.sort(
           Comparator.<Unit>comparingInt(u -> u.getMovementLeft().intValue())
-              .thenComparingInt(u -> UnitAttachment.get(u.getType()).getTransportCost())
+              .thenComparingInt(u -> u.getUnitAttachment().getTransportCost())
               .thenComparing(getDecreasingAttackComparator(player)));
       results.addAll(selectUnitsToTransportFromList(unit, units));
     }
@@ -266,7 +262,7 @@ public final class ProTransportUtils {
           maxSupport1 = usa.getBonus();
         }
       }
-      final int attack1 = UnitAttachment.get(o1.getType()).getAttack(player) + maxSupport1;
+      final int attack1 = o1.getUnitAttachment().getAttack(player) + maxSupport1;
       final Set<UnitSupportAttachment> supportAttachments2 =
           UnitSupportAttachment.get(o2.getType());
       int maxSupport2 = 0;
@@ -275,7 +271,7 @@ public final class ProTransportUtils {
           maxSupport2 = usa.getBonus();
         }
       }
-      final int attack2 = UnitAttachment.get(o2.getType()).getAttack(player) + maxSupport2;
+      final int attack2 = o2.getUnitAttachment().getAttack(player) + maxSupport2;
       return attack2 - attack1;
     };
   }
@@ -285,15 +281,12 @@ public final class ProTransportUtils {
    */
   public static List<Unit> getAirThatCantLandOnCarrier(
       final GamePlayer player, final Territory t, final List<Unit> units) {
-    final GameState data = player.getData();
-
     int capacity = AirMovementValidator.carrierCapacity(units, t);
     final Collection<Unit> airUnits =
-        CollectionUtils.getMatches(
-            units, ProMatches.unitIsAlliedAir(player, data.getRelationshipTracker()));
+        CollectionUtils.getMatches(units, ProMatches.unitIsAlliedAir(player));
     final List<Unit> airThatCantLand = new ArrayList<>();
     for (final Unit airUnit : airUnits) {
-      final UnitAttachment ua = UnitAttachment.get(airUnit.getType());
+      final UnitAttachment ua = airUnit.getUnitAttachment();
       final int cost = ua.getCarrierCost();
       if (cost != -1) {
         if (cost <= capacity) {
@@ -315,15 +308,12 @@ public final class ProTransportUtils {
       final Territory t,
       final Collection<Unit> existingUnits,
       final Unit newUnit) {
-    final GameState data = player.getData();
-
     int capacity = AirMovementValidator.carrierCapacity(existingUnits, t);
     final Collection<Unit> airUnits =
-        CollectionUtils.getMatches(
-            existingUnits, ProMatches.unitIsAlliedAir(player, data.getRelationshipTracker()));
+        CollectionUtils.getMatches(existingUnits, ProMatches.unitIsAlliedAir(player));
     airUnits.add(newUnit);
     for (final Unit airUnit : airUnits) {
-      final UnitAttachment ua = UnitAttachment.get(airUnit.getType());
+      final UnitAttachment ua = airUnit.getUnitAttachment();
       final int cost = ua.getCarrierCost();
       if (cost != -1) {
         capacity -= cost;
@@ -360,7 +350,7 @@ public final class ProTransportUtils {
     final Collection<Unit> airUnits =
         CollectionUtils.getMatches(ownedNearbyUnits, ProMatches.unitIsOwnedAir(player));
     for (final Unit airUnit : airUnits) {
-      final UnitAttachment ua = UnitAttachment.get(airUnit.getType());
+      final UnitAttachment ua = airUnit.getUnitAttachment();
       final int cost = ua.getCarrierCost();
       if (cost != -1) {
         capacity -= cost;
@@ -381,7 +371,7 @@ public final class ProTransportUtils {
     final Collection<Unit> airUnits =
         CollectionUtils.getMatches(units, ProMatches.unitIsOwnedAir(player));
     for (final Unit airUnit : airUnits) {
-      final UnitAttachment ua = UnitAttachment.get(airUnit.getType());
+      final UnitAttachment ua = airUnit.getUnitAttachment();
       final int cost = ua.getCarrierCost();
       if (cost != -1) {
         capacity -= cost;
@@ -415,7 +405,7 @@ public final class ProTransportUtils {
     // Loop through all units, starting from the right, and rearrange units
     for (int i = result.size() - 1; i >= 0; i--) {
       final Unit unit = result.get(i);
-      final UnitAttachment ua = UnitAttachment.get(unit.getType());
+      final UnitAttachment ua = unit.getUnitAttachment();
       if (ua.getCarrierCost() > 0 || i == 0) { // If this is a plane or last unit
         // If we haven't ignored enough trailing planes and not last unit
         if (processedPlaneCount < planesThatDontNeedToLand && i > 0) {
@@ -436,8 +426,7 @@ public final class ProTransportUtils {
           seekedCarrier = result.get(seekedCarrierIndex);
           indexToPlaceCarrierAt =
               i + 1; // Tell the code to insert carrier to the right of this plane
-          spaceLeftOnSeekedCarrier =
-              UnitAttachment.get(seekedCarrier.getType()).getCarrierCapacity();
+          spaceLeftOnSeekedCarrier = seekedCarrier.getUnitAttachment().getCarrierCapacity();
         }
         if (ua.getCarrierCost() > 0) {
           spaceLeftOnSeekedCarrier -= ua.getCarrierCost();
@@ -473,8 +462,7 @@ public final class ProTransportUtils {
             // Place next carrier right before this plane (which just filled the old carrier that
             // was just moved)
             indexToPlaceCarrierAt = i;
-            spaceLeftOnSeekedCarrier =
-                UnitAttachment.get(seekedCarrier.getType()).getCarrierCapacity();
+            spaceLeftOnSeekedCarrier = seekedCarrier.getUnitAttachment().getCarrierCapacity();
           } else {
 
             // If it's later in the list
@@ -493,7 +481,7 @@ public final class ProTransportUtils {
             final List<Unit> planesBetweenHereAndCarrier = new ArrayList<>();
             for (int i2 = i; i2 < carrierPlaceLocation; i2++) {
               final Unit unit2 = result.get(i2);
-              final UnitAttachment ua2 = UnitAttachment.get(unit2.getType());
+              final UnitAttachment ua2 = unit2.getUnitAttachment();
               if (ua2.getCarrierCost() > 0) {
                 planesBetweenHereAndCarrier.add(unit2);
               }
@@ -523,12 +511,44 @@ public final class ProTransportUtils {
             // Since we only moved planes up, just reduce next carrier place index by plane move
             // count
             indexToPlaceCarrierAt = carrierPlaceLocation - planeMoveCount;
-            spaceLeftOnSeekedCarrier =
-                UnitAttachment.get(seekedCarrier.getType()).getCarrierCapacity();
+            spaceLeftOnSeekedCarrier = seekedCarrier.getUnitAttachment().getCarrierCapacity();
           }
         }
       }
     }
     return result;
+  }
+
+  public static List<Unit> getTransports(
+      GamePlayer player, Map<Territory, ProTerritory> moveMap, Collection<Territory> territories) {
+    Predicate<Unit> isTransport = ProMatches.unitIsOwnedTransport(player);
+    List<Unit> transports = new ArrayList<>();
+    for (Territory t : territories) {
+      ProTerritory proTerritory = moveMap.get(t);
+      if (proTerritory != null) {
+        transports.addAll(CollectionUtils.getMatches(proTerritory.getAllDefenders(), isTransport));
+      }
+    }
+    return transports;
+  }
+
+  public static boolean checkTransportDefense(
+      ProData proData, ProOddsCalculator calc, ProTerritory proTerritory) {
+    final List<Unit> defendingUnits =
+        CollectionUtils.getMatches(proTerritory.getAllDefenders(), Matches.unitIsNotLand());
+    proTerritory.setBattleResultIfNull(
+        () -> calc.estimateDefendBattleResults(proData, proTerritory, defendingUnits));
+    Territory t = proTerritory.getTerritory();
+    ProBattleResult result = proTerritory.getBattleResult();
+    ProLogger.trace(
+        String.format(
+            "%s TUVSwing=%s, Win%%=%s, enemyAttackers=%s, defenders=%s",
+            t.getName(),
+            result.getTuvSwing(),
+            result.getWinPercentage(),
+            proTerritory.getMaxEnemyUnits().size(),
+            defendingUnits.size()));
+    return result.getWinPercentage() > (100 - proData.getWinPercentage())
+        || result.getTuvSwing() > 0;
   }
 }

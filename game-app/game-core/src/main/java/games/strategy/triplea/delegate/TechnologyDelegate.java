@@ -7,7 +7,6 @@ import games.strategy.engine.data.GamePlayer;
 import games.strategy.engine.data.Resource;
 import games.strategy.engine.data.TechnologyFrontier;
 import games.strategy.engine.data.changefactory.ChangeFactory;
-import games.strategy.engine.delegate.IDelegateBridge;
 import games.strategy.engine.player.Player;
 import games.strategy.engine.random.IRandomStats.DiceType;
 import games.strategy.triplea.Constants;
@@ -31,6 +30,7 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
 import java.util.function.Predicate;
+import javax.annotation.Nullable;
 import org.triplea.java.collections.CollectionUtils;
 import org.triplea.java.collections.IntegerMap;
 import org.triplea.sound.SoundPath;
@@ -41,7 +41,7 @@ import org.triplea.sound.SoundPath;
  */
 public class TechnologyDelegate extends BaseTripleADelegate implements ITechDelegate {
   private int techCost;
-  private Map<GamePlayer, Collection<TechAdvance>> techs;
+  private @Nullable Map<GamePlayer, Collection<TechAdvance>> techs;
   private TechnologyFrontier techCategory;
   private boolean needToInitialize = true;
 
@@ -52,11 +52,6 @@ public class TechnologyDelegate extends BaseTripleADelegate implements ITechDele
     super.initialize(name, displayName);
     techs = new HashMap<>();
     techCost = -1;
-  }
-
-  @Override
-  public void setDelegateBridgeAndPlayer(final IDelegateBridge delegateBridge) {
-    super.setDelegateBridgeAndPlayer(new GameDelegateBridge(delegateBridge));
   }
 
   @Override
@@ -153,8 +148,14 @@ public class TechnologyDelegate extends BaseTripleADelegate implements ITechDele
     return true;
   }
 
-  public Map<GamePlayer, Collection<TechAdvance>> getAdvances() {
-    return techs;
+  public @Nullable Collection<TechAdvance> getAdvances(GamePlayer player) {
+    return techs == null ? null : techs.get(player);
+  }
+
+  public void clearAdvances(GamePlayer player) {
+    if (techs != null) {
+      techs.remove(player);
+    }
   }
 
   @Override
@@ -193,20 +194,19 @@ public class TechnologyDelegate extends BaseTripleADelegate implements ITechDele
     int techHits;
     int remainder = 0;
     final int diceSides = data.getDiceSides();
-    if (BaseEditDelegate.getEditMode(data.getProperties())) {
+    if (EditDelegate.getEditMode(data.getProperties())) {
       final Player tripleaPlayer = bridge.getRemotePlayer();
       random = tripleaPlayer.selectFixedDice(techRolls, diceSides, annotation, diceSides);
       techHits = getTechHits(random);
     } else if (Properties.getLowLuckTechOnly(getData().getProperties())) {
       techHits = techRolls / diceSides;
       remainder = techRolls % diceSides;
+      random = bridge.getRandom(diceSides, 1, player, DiceType.TECH, annotation);
       if (remainder > 0) {
-        random = bridge.getRandom(diceSides, 1, player, DiceType.TECH, annotation);
         if (random[0] + 1 <= remainder) {
           techHits++;
         }
       } else {
-        random = bridge.getRandom(diceSides, 1, player, DiceType.TECH, annotation);
         remainder = diceSides;
       }
     } else {
@@ -373,7 +373,7 @@ public class TechnologyDelegate extends BaseTripleADelegate implements ITechDele
     final String annotation = player.getName() + " rolling to see what tech advances are acquired";
     final int[] random;
     if (Properties.getSelectableTechRoll(getData().getProperties())
-        || BaseEditDelegate.getEditMode(getData().getProperties())) {
+        || EditDelegate.getEditMode(getData().getProperties())) {
       final Player tripleaPlayer = bridge.getRemotePlayer();
       random = tripleaPlayer.selectFixedDice(hits, 0, annotation, available.size());
     } else {

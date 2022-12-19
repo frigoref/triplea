@@ -8,10 +8,9 @@ import games.strategy.engine.data.Unit;
 import games.strategy.engine.delegate.IDelegateBridge;
 import games.strategy.engine.random.IRandomStats.DiceType;
 import games.strategy.triplea.Properties;
-import games.strategy.triplea.attachments.UnitAttachment;
-import games.strategy.triplea.delegate.BaseEditDelegate;
 import games.strategy.triplea.delegate.DiceRoll;
 import games.strategy.triplea.delegate.Die.DieType;
+import games.strategy.triplea.delegate.EditDelegate;
 import games.strategy.triplea.delegate.Matches;
 import games.strategy.triplea.delegate.data.CasualtyDetails;
 import games.strategy.triplea.delegate.power.calculator.AaPowerStrengthAndRolls;
@@ -50,7 +49,7 @@ public class AaCasualtySelector {
         !defendingAa.isEmpty()
             && defendingAa.stream()
                 .allMatch(Matches.unitAaShotDamageableInsteadOfKillingInstantly());
-    if (BaseEditDelegate.getEditMode(data.getProperties())
+    if (EditDelegate.getEditMode(data.getProperties())
         || Properties.getChooseAaCasualties(data.getProperties())) {
       return CasualtySelector.selectCasualties(
           hitPlayer,
@@ -95,8 +94,8 @@ public class AaCasualtySelector {
     for (final Unit target : targets) {
       final int hpLeft =
           allowMultipleHitsPerUnit
-              ? (UnitAttachment.get(target.getType()).getHitPoints() - target.getHits())
-              : Math.min(1, UnitAttachment.get(target.getType()).getHitPoints() - target.getHits());
+              ? (target.getUnitAttachment().getHitPoints() - target.getHits())
+              : Math.min(1, target.getUnitAttachment().getHitPoints() - target.getHits());
       for (int hp = 0; hp < hpLeft; ++hp) {
         // if allowMultipleHitsPerUnit, then the target needs to be added for each hp
         targetsList.add(target);

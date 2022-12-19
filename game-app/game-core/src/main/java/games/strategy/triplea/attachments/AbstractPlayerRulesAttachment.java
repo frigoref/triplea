@@ -1,6 +1,5 @@
 package games.strategy.triplea.attachments;
 
-import com.google.common.collect.ImmutableMap;
 import games.strategy.engine.data.Attachable;
 import games.strategy.engine.data.GameData;
 import games.strategy.engine.data.GamePlayer;
@@ -10,7 +9,7 @@ import games.strategy.engine.data.UnitType;
 import games.strategy.engine.data.gameparser.GameParseException;
 import games.strategy.triplea.Constants;
 import java.util.Collection;
-import java.util.Map;
+import javax.annotation.Nullable;
 import lombok.extern.slf4j.Slf4j;
 import org.triplea.java.collections.IntegerMap;
 
@@ -24,7 +23,8 @@ import org.triplea.java.collections.IntegerMap;
  * ownership of territories, or objectiveValue (the money given if the condition is true), would NOT
  * go in This class. <br>
  * Please do not add new things to this class. Any new Player-Rules type of stuff should go in
- * "PlayerAttachment".
+ * "PlayerAttachment". Note: Empty collection fields default to null to minimize memory use and
+ * serialization size.
  */
 @Slf4j
 public abstract class AbstractPlayerRulesAttachment extends AbstractRulesAttachment {
@@ -34,8 +34,8 @@ public abstract class AbstractPlayerRulesAttachment extends AbstractRulesAttachm
   // These variables are related to a "rulesAttachment" that changes certain rules for the attached
   // player. They are
   // not related to conditions at all.
-  protected String movementRestrictionType = null;
-  protected String[] movementRestrictionTerritories = null;
+  protected @Nullable String movementRestrictionType = null;
+  protected @Nullable String[] movementRestrictionTerritories = null;
   // allows placing units in any owned land
   protected boolean placementAnyTerritory = false;
   // allows placing units in any sea by owned land
@@ -51,7 +51,7 @@ public abstract class AbstractPlayerRulesAttachment extends AbstractRulesAttachm
   // negates dominatingFirstRoundAttack
   protected boolean negateDominatingFirstRoundAttack = false;
   // automatically produces 1 unit of a certain
-  protected IntegerMap<UnitType> productionPerXTerritories = new IntegerMap<>();
+  protected @Nullable IntegerMap<UnitType> productionPerXTerritories = null;
   // type per every X territories owned
   // stops the user from placing units in any territory that already contains more than this
   protected int placementPerTerritory = -1;
@@ -117,10 +117,6 @@ public abstract class AbstractPlayerRulesAttachment extends AbstractRulesAttachm
   }
 
   private void setMovementRestrictionTerritories(final String value) {
-    if (value == null) {
-      movementRestrictionTerritories = null;
-      return;
-    }
     movementRestrictionTerritories = splitOnColon(value);
     validateNames(movementRestrictionTerritories);
   }
@@ -138,18 +134,14 @@ public abstract class AbstractPlayerRulesAttachment extends AbstractRulesAttachm
   }
 
   private void setMovementRestrictionType(final String value) throws GameParseException {
-    if (value == null) {
-      movementRestrictionType = null;
-      return;
-    }
     if (!(value.equals("disallowed") || value.equals("allowed"))) {
       throw new GameParseException(
           "movementRestrictionType must be allowed or disallowed" + thisErrorMsg());
     }
-    movementRestrictionType = value;
+    movementRestrictionType = value.intern();
   }
 
-  public String getMovementRestrictionType() {
+  public @Nullable String getMovementRestrictionType() {
     return movementRestrictionType;
   }
 
@@ -171,14 +163,14 @@ public abstract class AbstractPlayerRulesAttachment extends AbstractRulesAttachm
       unitTypeToProduce = s[1];
     }
     // validate that this unit exists in the xml
-    final UnitType ut = getData().getUnitTypeList().getUnitType(unitTypeToProduce);
-    if (ut == null) {
-      throw new GameParseException("No unit called: " + unitTypeToProduce + thisErrorMsg());
-    }
+    final UnitType ut = getUnitTypeOrThrow(unitTypeToProduce);
     final int n = getInt(s[0]);
     if (n <= 0) {
       throw new GameParseException(
           "productionPerXTerritories must be a positive integer" + thisErrorMsg());
+    }
+    if (productionPerXTerritories == null) {
+      productionPerXTerritories = new IntegerMap<>();
     }
     productionPerXTerritories.put(ut, n);
   }
@@ -188,11 +180,11 @@ public abstract class AbstractPlayerRulesAttachment extends AbstractRulesAttachm
   }
 
   public IntegerMap<UnitType> getProductionPerXTerritories() {
-    return productionPerXTerritories;
+    return getIntegerMapProperty(productionPerXTerritories);
   }
 
   private void resetProductionPerXTerritories() {
-    productionPerXTerritories = new IntegerMap<>();
+    productionPerXTerritories = null;
   }
 
   private void setPlacementPerTerritory(final String value) {
@@ -345,92 +337,81 @@ public abstract class AbstractPlayerRulesAttachment extends AbstractRulesAttachm
   }
 
   @Override
-  public Map<String, MutableProperty<?>> getPropertyMap() {
-    return ImmutableMap.<String, MutableProperty<?>>builder()
-        .putAll(super.getPropertyMap())
-        .put(
-            "movementRestrictionType",
-            MutableProperty.ofString(
-                this::setMovementRestrictionType,
-                this::getMovementRestrictionType,
-                this::resetMovementRestrictionType))
-        .put(
-            "movementRestrictionTerritories",
-            MutableProperty.of(
-                this::setMovementRestrictionTerritories,
-                this::setMovementRestrictionTerritories,
-                this::getMovementRestrictionTerritories,
-                this::resetMovementRestrictionTerritories))
-        .put(
-            "placementAnyTerritory",
-            MutableProperty.of(
-                this::setPlacementAnyTerritory,
-                this::setPlacementAnyTerritory,
-                this::getPlacementAnyTerritory,
-                this::resetPlacementAnyTerritory))
-        .put(
-            "placementAnySeaZone",
-            MutableProperty.of(
-                this::setPlacementAnySeaZone,
-                this::setPlacementAnySeaZone,
-                this::getPlacementAnySeaZone,
-                this::resetPlacementAnySeaZone))
-        .put(
-            "placementCapturedTerritory",
-            MutableProperty.of(
-                this::setPlacementCapturedTerritory,
-                this::setPlacementCapturedTerritory,
-                this::getPlacementCapturedTerritory,
-                this::resetPlacementCapturedTerritory))
-        .put(
-            "unlimitedProduction",
-            MutableProperty.of(
-                this::setUnlimitedProduction,
-                this::setUnlimitedProduction,
-                this::getUnlimitedProduction,
-                this::resetUnlimitedProduction))
-        .put(
-            "placementInCapitalRestricted",
-            MutableProperty.of(
-                this::setPlacementInCapitalRestricted,
-                this::setPlacementInCapitalRestricted,
-                this::getPlacementInCapitalRestricted,
-                this::resetPlacementInCapitalRestricted))
-        .put(
-            "dominatingFirstRoundAttack",
-            MutableProperty.of(
-                this::setDominatingFirstRoundAttack,
-                this::setDominatingFirstRoundAttack,
-                this::getDominatingFirstRoundAttack,
-                this::resetDominatingFirstRoundAttack))
-        .put(
-            "negateDominatingFirstRoundAttack",
-            MutableProperty.of(
-                this::setNegateDominatingFirstRoundAttack,
-                this::setNegateDominatingFirstRoundAttack,
-                this::getNegateDominatingFirstRoundAttack,
-                this::resetNegateDominatingFirstRoundAttack))
-        .put(
-            "productionPerXTerritories",
-            MutableProperty.of(
-                this::setProductionPerXTerritories,
-                this::setProductionPerXTerritories,
-                this::getProductionPerXTerritories,
-                this::resetProductionPerXTerritories))
-        .put(
-            "placementPerTerritory",
-            MutableProperty.of(
-                this::setPlacementPerTerritory,
-                this::setPlacementPerTerritory,
-                this::getPlacementPerTerritory,
-                this::resetPlacementPerTerritory))
-        .put(
-            "maxPlacePerTerritory",
-            MutableProperty.of(
-                this::setMaxPlacePerTerritory,
-                this::setMaxPlacePerTerritory,
-                this::getMaxPlacePerTerritory,
-                this::resetMaxPlacePerTerritory))
-        .build();
+  public MutableProperty<?> getPropertyOrNull(String propertyName) {
+    switch (propertyName) {
+      case "movementRestrictionType":
+        return MutableProperty.ofString(
+            this::setMovementRestrictionType,
+            this::getMovementRestrictionType,
+            this::resetMovementRestrictionType);
+      case "movementRestrictionTerritories":
+        return MutableProperty.of(
+            this::setMovementRestrictionTerritories,
+            this::setMovementRestrictionTerritories,
+            this::getMovementRestrictionTerritories,
+            this::resetMovementRestrictionTerritories);
+      case "placementAnyTerritory":
+        return MutableProperty.of(
+            this::setPlacementAnyTerritory,
+            this::setPlacementAnyTerritory,
+            this::getPlacementAnyTerritory,
+            this::resetPlacementAnyTerritory);
+      case "placementAnySeaZone":
+        return MutableProperty.of(
+            this::setPlacementAnySeaZone,
+            this::setPlacementAnySeaZone,
+            this::getPlacementAnySeaZone,
+            this::resetPlacementAnySeaZone);
+      case "placementCapturedTerritory":
+        return MutableProperty.of(
+            this::setPlacementCapturedTerritory,
+            this::setPlacementCapturedTerritory,
+            this::getPlacementCapturedTerritory,
+            this::resetPlacementCapturedTerritory);
+      case "unlimitedProduction":
+        return MutableProperty.of(
+            this::setUnlimitedProduction,
+            this::setUnlimitedProduction,
+            this::getUnlimitedProduction,
+            this::resetUnlimitedProduction);
+      case "placementInCapitalRestricted":
+        return MutableProperty.of(
+            this::setPlacementInCapitalRestricted,
+            this::setPlacementInCapitalRestricted,
+            this::getPlacementInCapitalRestricted,
+            this::resetPlacementInCapitalRestricted);
+      case "dominatingFirstRoundAttack":
+        return MutableProperty.of(
+            this::setDominatingFirstRoundAttack,
+            this::setDominatingFirstRoundAttack,
+            this::getDominatingFirstRoundAttack,
+            this::resetDominatingFirstRoundAttack);
+      case "negateDominatingFirstRoundAttack":
+        return MutableProperty.of(
+            this::setNegateDominatingFirstRoundAttack,
+            this::setNegateDominatingFirstRoundAttack,
+            this::getNegateDominatingFirstRoundAttack,
+            this::resetNegateDominatingFirstRoundAttack);
+      case "productionPerXTerritories":
+        return MutableProperty.of(
+            this::setProductionPerXTerritories,
+            this::setProductionPerXTerritories,
+            this::getProductionPerXTerritories,
+            this::resetProductionPerXTerritories);
+      case "placementPerTerritory":
+        return MutableProperty.of(
+            this::setPlacementPerTerritory,
+            this::setPlacementPerTerritory,
+            this::getPlacementPerTerritory,
+            this::resetPlacementPerTerritory);
+      case "maxPlacePerTerritory":
+        return MutableProperty.of(
+            this::setMaxPlacePerTerritory,
+            this::setMaxPlacePerTerritory,
+            this::getMaxPlacePerTerritory,
+            this::resetMaxPlacePerTerritory);
+      default:
+        return super.getPropertyOrNull(propertyName);
+    }
   }
 }

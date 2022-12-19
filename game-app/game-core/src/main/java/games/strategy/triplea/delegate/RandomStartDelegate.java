@@ -11,7 +11,6 @@ import games.strategy.engine.message.IRemote;
 import games.strategy.engine.random.IRandomStats.DiceType;
 import games.strategy.triplea.Properties;
 import games.strategy.triplea.formatter.MyFormatter;
-import games.strategy.triplea.util.TuvUtils;
 import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -103,7 +102,7 @@ public class RandomStartDelegate extends BaseTripleADelegate {
       if (randomTerritories) {
         pos += hitRandom[i];
         i++;
-        final IntegerMap<UnitType> costs = TuvUtils.getCostsForTuv(currentPickingPlayer, data);
+        final IntegerMap<UnitType> costs = bridge.getCostsForTuv(currentPickingPlayer);
         final List<Unit> units = new ArrayList<>(currentPickingPlayer.getUnits());
 
         units.sort(Comparator.comparingInt(unit -> costs.getInt(unit.getType())));
@@ -264,14 +263,14 @@ public class RandomStartDelegate extends BaseTripleADelegate {
   private static Predicate<Territory> getTerritoryPickableMatch() {
     return Matches.territoryIsLand()
         .and(Matches.territoryIsNotImpassable())
-        .and(Matches.isTerritoryOwnedBy(GamePlayer.NULL_PLAYERID))
+        .and(Matches.isTerritoryNeutral())
         .and(Matches.territoryIsEmpty());
   }
 
   private static Predicate<GamePlayer> getPlayerCanPickMatch() {
     return player ->
         player != null
-            && !player.equals(GamePlayer.NULL_PLAYERID)
+            && !player.isNull()
             && !player.getUnitCollection().isEmpty()
             && !player.getIsDisabled();
   }

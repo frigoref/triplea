@@ -88,7 +88,7 @@ public class PoliticsDelegate extends BaseTripleADelegate implements IPoliticsDe
 
   @Override
   public boolean delegateCurrentlyRequiresUserInput() {
-    if (!player.amNotDeadYet(getData().getMap())) {
+    if (!player.amNotDeadYet()) {
       return false;
     }
     return Properties.getUsePolitics(getData().getProperties()) && !getValidActions().isEmpty();
@@ -104,12 +104,9 @@ public class PoliticsDelegate extends BaseTripleADelegate implements IPoliticsDe
   @Override
   public Collection<PoliticalActionAttachment> getValidActions() {
     final GameData data = bridge.getData();
-    data.acquireReadLock();
     final Map<ICondition, Boolean> testedConditions;
-    try {
+    try (GameData.Unlocker ignored = data.acquireReadLock()) {
       testedConditions = getTestedConditions();
-    } finally {
-      data.releaseReadLock();
     }
     return PoliticalActionAttachment.getValidActions(player, testedConditions, data);
   }
@@ -181,14 +178,17 @@ public class PoliticsDelegate extends BaseTripleADelegate implements IPoliticsDe
                     Matches.relationshipTypeIsAtWar(),
                     Matches.relationshipTypeIsAtWar().negate(),
                     data.getRelationshipTracker()));
+    final String acceptanceQuestion =
+        bridge
+            .getResourceLoader()
+            .map(PoliticsText::new)
+            .map(politicsText -> politicsText.getAcceptanceQuestion(paa.getText()))
+            // String is ignored if getResourceLoader() returns empty Optional.
+            .orElse("");
     if (!Properties.getAlliancesCanChainTogether(data.getProperties())
         || !intoAlliedChainOrIntoOrOutOfWar.test(paa)) {
       for (final GamePlayer player : paa.getActionAccept()) {
-        if (!getRemotePlayer(player)
-            .acceptAction(
-                this.player,
-                PoliticsText.getInstance().getAcceptanceQuestion(paa.getText()),
-                true)) {
+        if (!getRemotePlayer(player).acceptAction(this.player, acceptanceQuestion, true)) {
           return false;
         }
       }
@@ -200,18 +200,17 @@ public class PoliticsDelegate extends BaseTripleADelegate implements IPoliticsDe
       playersWhoNeedToAccept.addAll(
           CollectionUtils.getMatches(
               data.getPlayerList().getPlayers(),
-              Matches.isAlliedAndAlliancesCanChainTogether(player, data.getRelationshipTracker())));
+              Matches.isAlliedAndAlliancesCanChainTogether(player)));
       for (final GamePlayer player : paa.getActionAccept()) {
         playersWhoNeedToAccept.addAll(
             CollectionUtils.getMatches(
                 data.getPlayerList().getPlayers(),
-                Matches.isAlliedAndAlliancesCanChainTogether(
-                    player, data.getRelationshipTracker())));
+                Matches.isAlliedAndAlliancesCanChainTogether(player)));
       }
       playersWhoNeedToAccept.removeAll(paa.getActionAccept());
       for (final GamePlayer player : playersWhoNeedToAccept) {
-        String actionText = PoliticsText.getInstance().getAcceptanceQuestion(paa.getText());
-        if (actionText.equals("NONE")) {
+        final String actionText;
+        if (acceptanceQuestion.equals("NONE")) {
           actionText =
               this.player.getName()
                   + " wants to take the following action: "
@@ -227,18 +226,14 @@ public class PoliticsDelegate extends BaseTripleADelegate implements IPoliticsDe
                   + " will ask "
                   + MyFormatter.defaultNamedToTextList(paa.getActionAccept())
                   + ", the following question: \r\n "
-                  + actionText;
+                  + acceptanceQuestion;
         }
         if (!getRemotePlayer(player).acceptAction(this.player, actionText, true)) {
           return false;
         }
       }
       for (final GamePlayer player : paa.getActionAccept()) {
-        if (!getRemotePlayer(player)
-            .acceptAction(
-                this.player,
-                PoliticsText.getInstance().getAcceptanceQuestion(paa.getText()),
-                true)) {
+        if (!getRemotePlayer(player).acceptAction(this.player, acceptanceQuestion, true)) {
           return false;
         }
       }
@@ -315,8 +310,14 @@ public class PoliticsDelegate extends BaseTripleADelegate implements IPoliticsDe
             + " fails on action: "
             + MyFormatter.attachmentNameToText(paa.getName());
     bridge.getHistoryWriter().addChildToEvent(transcriptText);
-    sendNotification(PoliticsText.getInstance().getNotificationFailure(paa.getText()));
-    notifyOtherPlayers(PoliticsText.getInstance().getNotificationFailureOthers(paa.getText()));
+    bridge
+        .getResourceLoader()
+        .ifPresent(
+            resourceLoader -> {
+              PoliticsText politicsText = new PoliticsText(resourceLoader);
+              sendNotification(politicsText.getNotificationFailure(paa.getText()));
+              notifyOtherPlayers(politicsText.getNotificationFailureOthers(paa.getText()));
+            });
   }
 
   /**
@@ -328,8 +329,14 @@ public class PoliticsDelegate extends BaseTripleADelegate implements IPoliticsDe
     bridge
         .getSoundChannelBroadcaster()
         .playSoundForAll(SoundPath.CLIP_POLITICAL_ACTION_SUCCESSFUL, player);
-    sendNotification(PoliticsText.getInstance().getNotificationSuccess(paa.getText()));
-    notifyOtherPlayers(PoliticsText.getInstance().getNotificationSuccessOthers(paa.getText()));
+    bridge
+        .getResourceLoader()
+        .ifPresent(
+            resourceLoader -> {
+              PoliticsText politicsText = new PoliticsText(resourceLoader);
+              sendNotification(politicsText.getNotificationSuccess(paa.getText()));
+              notifyOtherPlayers(politicsText.getNotificationSuccessOthers(paa.getText()));
+            });
   }
 
   /**
@@ -466,9 +473,7 @@ public class PoliticsDelegate extends BaseTripleADelegate implements IPoliticsDe
     }
     final Collection<GamePlayer> players = data.getPlayerList().getPlayers();
     final Collection<GamePlayer> p1AlliedWith =
-        CollectionUtils.getMatches(
-            players,
-            Matches.isAlliedAndAlliancesCanChainTogether(player, data.getRelationshipTracker()));
+        CollectionUtils.getMatches(players, Matches.isAlliedAndAlliancesCanChainTogether(player));
     p1AlliedWith.remove(player);
     final CompositeChange change = new CompositeChange();
     for (final PoliticalActionAttachment.RelationshipChange relationshipChange :
@@ -523,9 +528,7 @@ public class PoliticsDelegate extends BaseTripleADelegate implements IPoliticsDe
 
     final Collection<GamePlayer> players = data.getPlayerList().getPlayers();
     final Collection<GamePlayer> p1AlliedWith =
-        CollectionUtils.getMatches(
-            players,
-            Matches.isAlliedAndAlliancesCanChainTogether(player, data.getRelationshipTracker()));
+        CollectionUtils.getMatches(players, Matches.isAlliedAndAlliancesCanChainTogether(player));
     final CompositeChange change = new CompositeChange();
     for (final PoliticalActionAttachment.RelationshipChange relationshipChange :
         paa.getRelationshipChanges()) {
@@ -542,9 +545,7 @@ public class PoliticsDelegate extends BaseTripleADelegate implements IPoliticsDe
           && Matches.relationshipTypeIsAtWar().negate().test(newType)) {
         final Collection<GamePlayer> otherPlayersAlliedWith =
             CollectionUtils.getMatches(
-                players,
-                Matches.isAlliedAndAlliancesCanChainTogether(
-                    otherPlayer, data.getRelationshipTracker()));
+                players, Matches.isAlliedAndAlliancesCanChainTogether(otherPlayer));
         if (!otherPlayersAlliedWith.contains(otherPlayer)) {
           otherPlayersAlliedWith.add(otherPlayer);
         }
@@ -603,14 +604,10 @@ public class PoliticsDelegate extends BaseTripleADelegate implements IPoliticsDe
     for (final GamePlayer p1 : players) {
       final Set<GamePlayer> p1NewAllies = new HashSet<>();
       final Collection<GamePlayer> p1AlliedWith =
-          CollectionUtils.getMatches(
-              players,
-              Matches.isAlliedAndAlliancesCanChainTogether(p1, data.getRelationshipTracker()));
+          CollectionUtils.getMatches(players, Matches.isAlliedAndAlliancesCanChainTogether(p1));
       for (final GamePlayer p2 : p1AlliedWith) {
         p1NewAllies.addAll(
-            CollectionUtils.getMatches(
-                players,
-                Matches.isAlliedAndAlliancesCanChainTogether(p2, data.getRelationshipTracker())));
+            CollectionUtils.getMatches(players, Matches.isAlliedAndAlliancesCanChainTogether(p2)));
       }
       p1NewAllies.removeAll(p1AlliedWith);
       p1NewAllies.remove(p1);
@@ -640,15 +637,11 @@ public class PoliticsDelegate extends BaseTripleADelegate implements IPoliticsDe
     for (final GamePlayer p1 : players) {
       final Set<GamePlayer> p1NewWar = new HashSet<>();
       final Collection<GamePlayer> p1WarWith =
-          CollectionUtils.getMatches(players, Matches.isAtWar(p1, data.getRelationshipTracker()));
+          CollectionUtils.getMatches(players, Matches.isAtWar(p1));
       final Collection<GamePlayer> p1AlliedWith =
-          CollectionUtils.getMatches(
-              players,
-              Matches.isAlliedAndAlliancesCanChainTogether(p1, data.getRelationshipTracker()));
+          CollectionUtils.getMatches(players, Matches.isAlliedAndAlliancesCanChainTogether(p1));
       for (final GamePlayer p2 : p1AlliedWith) {
-        p1NewWar.addAll(
-            CollectionUtils.getMatches(
-                players, Matches.isAtWar(p2, data.getRelationshipTracker())));
+        p1NewWar.addAll(CollectionUtils.getMatches(players, Matches.isAtWar(p2)));
       }
       p1NewWar.removeAll(p1WarWith);
       p1NewWar.remove(p1);

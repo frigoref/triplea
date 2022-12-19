@@ -5,7 +5,6 @@ import static games.strategy.triplea.delegate.GameDataTestUtil.assertMoveError;
 import static games.strategy.triplea.delegate.GameDataTestUtil.load;
 import static games.strategy.triplea.delegate.GameDataTestUtil.move;
 import static games.strategy.triplea.delegate.GameDataTestUtil.removeFrom;
-import static games.strategy.triplea.delegate.GameDataTestUtil.submarine;
 import static games.strategy.triplea.delegate.GameDataTestUtil.territory;
 import static games.strategy.triplea.delegate.MockDelegateBridge.advanceToStep;
 import static games.strategy.triplea.delegate.MockDelegateBridge.newDelegateBridge;
@@ -351,7 +350,7 @@ class PacificTest {
     assertMoveError(GameDataTestUtil.getUnits(map, toSz30.getStart()), toSz30);
 
     // Finally, adding a naval base in Canada shouldn't boost movement further.
-    TerritoryAttachment.get(canada).getPropertyMap().get("navalBase").setValue(true);
+    TerritoryAttachment.get(canada).getPropertyOrThrow("navalBase").setValue(true);
     assertThat(TerritoryAttachment.hasNavalBase(canada), is(true));
     // Should still fail to move 4.
     assertMoveError(GameDataTestUtil.getUnits(map, toSz30.getStart()), toSz30);

@@ -3,7 +3,6 @@ package games.strategy.triplea.attachments;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.collect.ImmutableMap;
 import games.strategy.engine.data.Attachable;
 import games.strategy.engine.data.DefaultAttachment;
 import games.strategy.engine.data.GameData;
@@ -23,7 +22,6 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 import javax.annotation.Nullable;
@@ -33,11 +31,15 @@ import lombok.EqualsAndHashCode;
 import lombok.ToString;
 import org.triplea.java.collections.CollectionUtils;
 
-/** An attachment for instances of {@link Territory}. */
+/**
+ * An attachment for instances of {@link Territory}.
+ *
+ * <p>Note: Empty collection fields default to null to minimize memory use and serialization size.
+ */
 public class TerritoryAttachment extends DefaultAttachment {
   private static final long serialVersionUID = 9102862080104655281L;
 
-  private String capital = null;
+  private @Nullable String capital = null;
   private boolean originalFactory = false;
   // "setProduction" will set both production and unitProduction.
   // While "setProductionOnly" sets only production.
@@ -46,17 +48,17 @@ public class TerritoryAttachment extends DefaultAttachment {
   private boolean isImpassable = false;
   private GamePlayer originalOwner = null;
   private boolean convoyRoute = false;
-  private Set<Territory> convoyAttached = new HashSet<>();
-  private List<GamePlayer> changeUnitOwners = new ArrayList<>();
-  private List<GamePlayer> captureUnitOnEnteringBy = new ArrayList<>();
+  private @Nullable Set<Territory> convoyAttached = null;
+  private @Nullable List<GamePlayer> changeUnitOwners = null;
+  private @Nullable List<GamePlayer> captureUnitOnEnteringBy = null;
   private boolean navalBase = false;
   private boolean airBase = false;
   private boolean kamikazeZone = false;
   private int unitProduction = 0;
   private boolean blockadeZone = false;
-  private List<TerritoryEffect> territoryEffect = new ArrayList<>();
-  private List<String> whenCapturedByGoesTo = new ArrayList<>();
-  private ResourceCollection resources = null;
+  private @Nullable List<TerritoryEffect> territoryEffect = null;
+  private @Nullable List<String> whenCapturedByGoesTo = null;
+  private @Nullable ResourceCollection resources = null;
 
   public TerritoryAttachment(
       final String name, final Attachable attachable, final GameData gameData) {
@@ -215,10 +217,6 @@ public class TerritoryAttachment extends DefaultAttachment {
   }
 
   private void setResources(final String value) throws GameParseException {
-    if (value == null) {
-      resources = null;
-      return;
-    }
     if (resources == null) {
       resources = new ResourceCollection(getData());
     }
@@ -239,7 +237,7 @@ public class TerritoryAttachment extends DefaultAttachment {
     resources = value;
   }
 
-  public ResourceCollection getResources() {
+  public @Nullable ResourceCollection getResources() {
     return resources;
   }
 
@@ -264,14 +262,7 @@ public class TerritoryAttachment extends DefaultAttachment {
   }
 
   public void setCapital(final String value) throws GameParseException {
-    if (value == null) {
-      capital = null;
-      return;
-    }
-    final GamePlayer p = getData().getPlayerList().getPlayerId(value);
-    if (p == null) {
-      throw new GameParseException("No Player named: " + value + thisErrorMsg());
-    }
+    getPlayerOrThrow(value);
     capital = value;
   }
 
@@ -361,14 +352,7 @@ public class TerritoryAttachment extends DefaultAttachment {
   }
 
   private void setOriginalOwner(final String player) throws GameParseException {
-    if (player == null) {
-      originalOwner = null;
-    }
-    final GamePlayer tempPlayer = getData().getPlayerList().getPlayerId(player);
-    if (tempPlayer == null) {
-      throw new GameParseException("No player named: " + player + thisErrorMsg());
-    }
-    originalOwner = tempPlayer;
+    originalOwner = getPlayerOrThrow(player);
   }
 
   public GamePlayer getOriginalOwner() {
@@ -396,16 +380,10 @@ public class TerritoryAttachment extends DefaultAttachment {
   }
 
   private void setChangeUnitOwners(final String value) throws GameParseException {
-    final String[] temp = splitOnColon(value);
-    for (final String name : temp) {
-      final GamePlayer tempPlayer = getData().getPlayerList().getPlayerId(name);
-      if (tempPlayer != null) {
-        changeUnitOwners.add(tempPlayer);
-      } else if (name.equalsIgnoreCase("true") || name.equalsIgnoreCase("false")) {
-        changeUnitOwners.clear();
-      } else {
-        throw new GameParseException("No player named: " + name + thisErrorMsg());
-      }
+    if (value.equalsIgnoreCase("true") || value.equalsIgnoreCase("false")) {
+      changeUnitOwners = null;
+    } else {
+      changeUnitOwners = parsePlayerList(value, changeUnitOwners);
     }
   }
 
@@ -414,23 +392,15 @@ public class TerritoryAttachment extends DefaultAttachment {
   }
 
   public List<GamePlayer> getChangeUnitOwners() {
-    return changeUnitOwners;
+    return getListProperty(changeUnitOwners);
   }
 
   private void resetChangeUnitOwners() {
-    changeUnitOwners = new ArrayList<>();
+    changeUnitOwners = null;
   }
 
   private void setCaptureUnitOnEnteringBy(final String value) throws GameParseException {
-    final String[] temp = splitOnColon(value);
-    for (final String name : temp) {
-      final GamePlayer tempPlayer = getData().getPlayerList().getPlayerId(name);
-      if (tempPlayer != null) {
-        captureUnitOnEnteringBy.add(tempPlayer);
-      } else {
-        throw new GameParseException("No player named: " + name + thisErrorMsg());
-      }
-    }
+    captureUnitOnEnteringBy = parsePlayerList(value, captureUnitOnEnteringBy);
   }
 
   private void setCaptureUnitOnEnteringBy(final List<GamePlayer> value) {
@@ -438,11 +408,11 @@ public class TerritoryAttachment extends DefaultAttachment {
   }
 
   public List<GamePlayer> getCaptureUnitOnEnteringBy() {
-    return captureUnitOnEnteringBy;
+    return getListProperty(captureUnitOnEnteringBy);
   }
 
   private void resetCaptureUnitOnEnteringBy() {
-    captureUnitOnEnteringBy = new ArrayList<>();
+    captureUnitOnEnteringBy = null;
   }
 
   @VisibleForTesting
@@ -453,12 +423,12 @@ public class TerritoryAttachment extends DefaultAttachment {
           "whenCapturedByGoesTo must have 2 player names separated by a colon" + thisErrorMsg());
     }
     for (final String name : s) {
-      final GamePlayer player = getData().getPlayerList().getPlayerId(name);
-      if (player == null) {
-        throw new GameParseException("No player named: " + name + thisErrorMsg());
-      }
+      getPlayerOrThrow(name);
     }
-    whenCapturedByGoesTo.add(value);
+    if (whenCapturedByGoesTo == null) {
+      whenCapturedByGoesTo = new ArrayList<>();
+    }
+    whenCapturedByGoesTo.add(value.intern());
   }
 
   private void setWhenCapturedByGoesTo(final List<String> value) {
@@ -466,15 +436,15 @@ public class TerritoryAttachment extends DefaultAttachment {
   }
 
   private List<String> getWhenCapturedByGoesTo() {
-    return whenCapturedByGoesTo;
+    return getListProperty(whenCapturedByGoesTo);
   }
 
   private void resetWhenCapturedByGoesTo() {
-    whenCapturedByGoesTo = new ArrayList<>();
+    whenCapturedByGoesTo = null;
   }
 
   public Collection<CaptureOwnershipChange> getCaptureOwnershipChanges() {
-    return whenCapturedByGoesTo.stream()
+    return getWhenCapturedByGoesTo().stream()
         .map(this::parseCaptureOwnershipChange)
         .collect(Collectors.toList());
   }
@@ -493,6 +463,9 @@ public class TerritoryAttachment extends DefaultAttachment {
     for (final String name : s) {
       final TerritoryEffect effect = getData().getTerritoryEffectList().get(name);
       if (effect != null) {
+        if (territoryEffect == null) {
+          territoryEffect = new ArrayList<>();
+        }
         territoryEffect.add(effect);
       } else {
         throw new GameParseException("No TerritoryEffect named: " + name + thisErrorMsg());
@@ -505,11 +478,11 @@ public class TerritoryAttachment extends DefaultAttachment {
   }
 
   public List<TerritoryEffect> getTerritoryEffect() {
-    return territoryEffect;
+    return getListProperty(territoryEffect);
   }
 
   private void resetTerritoryEffect() {
-    territoryEffect = new ArrayList<>();
+    territoryEffect = null;
   }
 
   private void setConvoyAttached(final String value) throws GameParseException {
@@ -517,9 +490,9 @@ public class TerritoryAttachment extends DefaultAttachment {
       return;
     }
     for (final String subString : splitOnColon(value)) {
-      final Territory territory = getData().getMap().getTerritory(subString);
-      if (territory == null) {
-        throw new GameParseException("No territory called:" + subString + thisErrorMsg());
+      final Territory territory = getTerritoryOrThrow(subString);
+      if (convoyAttached == null) {
+        convoyAttached = new HashSet<>();
       }
       convoyAttached.add(territory);
     }
@@ -530,11 +503,11 @@ public class TerritoryAttachment extends DefaultAttachment {
   }
 
   public Set<Territory> getConvoyAttached() {
-    return convoyAttached;
+    return getSetProperty(convoyAttached);
   }
 
   private void resetConvoyAttached() {
-    convoyAttached = new HashSet<>();
+    convoyAttached = null;
   }
 
   public static boolean hasNavalBase(final Territory t) {
@@ -696,7 +669,7 @@ public class TerritoryAttachment extends DefaultAttachment {
       sb.append(br);
     }
     if (convoyRoute) {
-      if (!convoyAttached.isEmpty()) {
+      if (!getConvoyAttached().isEmpty()) {
         sb.append("Needs: ").append(MyFormatter.defaultNamedToTextList(convoyAttached)).append(br);
       }
       final Collection<Territory> requiredBy =
@@ -707,15 +680,15 @@ public class TerritoryAttachment extends DefaultAttachment {
             .append(br);
       }
     }
-    if (changeUnitOwners != null && !changeUnitOwners.isEmpty()) {
+    if (!getChangeUnitOwners().isEmpty()) {
       sb.append("Units May Change Ownership Here");
       sb.append(br);
     }
-    if (captureUnitOnEnteringBy != null && !captureUnitOnEnteringBy.isEmpty()) {
+    if (!getCaptureUnitOnEnteringBy().isEmpty()) {
       sb.append("May Allow The Capture of Some Units");
       sb.append(br);
     }
-    if (whenCapturedByGoesTo != null && !whenCapturedByGoesTo.isEmpty()) {
+    if (!getWhenCapturedByGoesTo().isEmpty()) {
       sb.append("Captured By -> Ownership Goes To");
       sb.append(br);
       for (final String value : whenCapturedByGoesTo) {
@@ -751,16 +724,15 @@ public class TerritoryAttachment extends DefaultAttachment {
         sb.append(br);
       }
     }
-    if (!territoryEffect.isEmpty()) {
+    if (!getTerritoryEffect().isEmpty()) {
       sb.append("Territory Effects: ");
       sb.append(br);
+      sb.append(
+          territoryEffect.stream()
+              .map(TerritoryEffect::getName)
+              .map(name -> "&nbsp;&nbsp;&nbsp;&nbsp;" + name + br)
+              .collect(Collectors.joining()));
     }
-    sb.append(
-        territoryEffect.stream()
-            .map(TerritoryEffect::getName)
-            .map(name -> "&nbsp;&nbsp;&nbsp;&nbsp;" + name + br)
-            .collect(Collectors.joining()));
-
     return sb.toString();
   }
 
@@ -768,120 +740,99 @@ public class TerritoryAttachment extends DefaultAttachment {
   public void validate(final GameState data) {}
 
   @Override
-  public Map<String, MutableProperty<?>> getPropertyMap() {
-    return ImmutableMap.<String, MutableProperty<?>>builder()
-        .put(
-            "capital",
-            MutableProperty.ofString(this::setCapital, this::getCapital, this::resetCapital))
-        .put(
-            "originalFactory",
-            MutableProperty.of(
-                this::setOriginalFactory,
-                this::setOriginalFactory,
-                this::getOriginalFactory,
-                this::resetOriginalFactory))
-        .put(
-            "production",
-            MutableProperty.of(
-                this::setProduction,
-                this::setProduction,
-                this::getProduction,
-                this::resetProduction))
-        .put("productionOnly", MutableProperty.ofWriteOnlyString(this::setProductionOnly))
-        .put(
-            "victoryCity",
-            MutableProperty.ofMapper(
-                DefaultAttachment::getInt, this::setVictoryCity, this::getVictoryCity, () -> 0))
-        .put(
-            "isImpassable",
-            MutableProperty.of(
-                this::setIsImpassable,
-                this::setIsImpassable,
-                this::getIsImpassable,
-                this::resetIsImpassable))
-        .put(
-            "originalOwner",
-            MutableProperty.of(
-                this::setOriginalOwner,
-                this::setOriginalOwner,
-                this::getOriginalOwner,
-                this::resetOriginalOwner))
-        .put(
-            "convoyRoute",
-            MutableProperty.of(
-                this::setConvoyRoute,
-                this::setConvoyRoute,
-                this::getConvoyRoute,
-                this::resetConvoyRoute))
-        .put(
-            "convoyAttached",
-            MutableProperty.of(
-                this::setConvoyAttached,
-                this::setConvoyAttached,
-                this::getConvoyAttached,
-                this::resetConvoyAttached))
-        .put(
-            "changeUnitOwners",
-            MutableProperty.of(
-                this::setChangeUnitOwners,
-                this::setChangeUnitOwners,
-                this::getChangeUnitOwners,
-                this::resetChangeUnitOwners))
-        .put(
-            "captureUnitOnEnteringBy",
-            MutableProperty.of(
-                this::setCaptureUnitOnEnteringBy,
-                this::setCaptureUnitOnEnteringBy,
-                this::getCaptureUnitOnEnteringBy,
-                this::resetCaptureUnitOnEnteringBy))
-        .put(
-            "navalBase",
-            MutableProperty.of(
-                this::setNavalBase, this::setNavalBase, this::getNavalBase, this::resetNavalBase))
-        .put(
-            "airBase",
-            MutableProperty.of(
-                this::setAirBase, this::setAirBase, this::getAirBase, this::resetAirBase))
-        .put(
-            "kamikazeZone",
-            MutableProperty.of(
-                this::setKamikazeZone,
-                this::setKamikazeZone,
-                this::getKamikazeZone,
-                this::resetKamikazeZone))
-        .put(
-            "unitProduction",
-            MutableProperty.ofMapper(
-                DefaultAttachment::getInt,
-                this::setUnitProduction,
-                this::getUnitProduction,
-                () -> 0))
-        .put(
-            "blockadeZone",
-            MutableProperty.of(
-                this::setBlockadeZone,
-                this::setBlockadeZone,
-                this::getBlockadeZone,
-                this::resetBlockadeZone))
-        .put(
-            "territoryEffect",
-            MutableProperty.of(
-                this::setTerritoryEffect,
-                this::setTerritoryEffect,
-                this::getTerritoryEffect,
-                this::resetTerritoryEffect))
-        .put(
-            "whenCapturedByGoesTo",
-            MutableProperty.of(
-                this::setWhenCapturedByGoesTo,
-                this::setWhenCapturedByGoesTo,
-                this::getWhenCapturedByGoesTo,
-                this::resetWhenCapturedByGoesTo))
-        .put(
-            "resources",
-            MutableProperty.of(
-                this::setResources, this::setResources, this::getResources, this::resetResources))
-        .build();
+  public MutableProperty<?> getPropertyOrNull(String propertyName) {
+    switch (propertyName) {
+      case "capital":
+        return MutableProperty.ofString(this::setCapital, this::getCapital, this::resetCapital);
+      case "originalFactory":
+        return MutableProperty.of(
+            this::setOriginalFactory,
+            this::setOriginalFactory,
+            this::getOriginalFactory,
+            this::resetOriginalFactory);
+      case "production":
+        return MutableProperty.of(
+            this::setProduction, this::setProduction, this::getProduction, this::resetProduction);
+      case "productionOnly":
+        return MutableProperty.ofWriteOnlyString(this::setProductionOnly);
+      case "victoryCity":
+        return MutableProperty.ofMapper(
+            DefaultAttachment::getInt, this::setVictoryCity, this::getVictoryCity, () -> 0);
+      case "isImpassable":
+        return MutableProperty.of(
+            this::setIsImpassable,
+            this::setIsImpassable,
+            this::getIsImpassable,
+            this::resetIsImpassable);
+      case "originalOwner":
+        return MutableProperty.of(
+            this::setOriginalOwner,
+            this::setOriginalOwner,
+            this::getOriginalOwner,
+            this::resetOriginalOwner);
+      case "convoyRoute":
+        return MutableProperty.of(
+            this::setConvoyRoute,
+            this::setConvoyRoute,
+            this::getConvoyRoute,
+            this::resetConvoyRoute);
+      case "convoyAttached":
+        return MutableProperty.of(
+            this::setConvoyAttached,
+            this::setConvoyAttached,
+            this::getConvoyAttached,
+            this::resetConvoyAttached);
+      case "changeUnitOwners":
+        return MutableProperty.of(
+            this::setChangeUnitOwners,
+            this::setChangeUnitOwners,
+            this::getChangeUnitOwners,
+            this::resetChangeUnitOwners);
+      case "captureUnitOnEnteringBy":
+        return MutableProperty.of(
+            this::setCaptureUnitOnEnteringBy,
+            this::setCaptureUnitOnEnteringBy,
+            this::getCaptureUnitOnEnteringBy,
+            this::resetCaptureUnitOnEnteringBy);
+      case "navalBase":
+        return MutableProperty.of(
+            this::setNavalBase, this::setNavalBase, this::getNavalBase, this::resetNavalBase);
+      case "airBase":
+        return MutableProperty.of(
+            this::setAirBase, this::setAirBase, this::getAirBase, this::resetAirBase);
+      case "kamikazeZone":
+        return MutableProperty.of(
+            this::setKamikazeZone,
+            this::setKamikazeZone,
+            this::getKamikazeZone,
+            this::resetKamikazeZone);
+      case "unitProduction":
+        return MutableProperty.ofMapper(
+            DefaultAttachment::getInt, this::setUnitProduction, this::getUnitProduction, () -> 0);
+      case "blockadeZone":
+        return MutableProperty.of(
+            this::setBlockadeZone,
+            this::setBlockadeZone,
+            this::getBlockadeZone,
+            this::resetBlockadeZone);
+      case "territoryEffect":
+        return MutableProperty.of(
+            this::setTerritoryEffect,
+            this::setTerritoryEffect,
+            this::getTerritoryEffect,
+            this::resetTerritoryEffect);
+      case "whenCapturedByGoesTo":
+        return MutableProperty.of(
+            this::setWhenCapturedByGoesTo,
+            this::setWhenCapturedByGoesTo,
+            this::getWhenCapturedByGoesTo,
+            this::resetWhenCapturedByGoesTo);
+      case "resources":
+        return MutableProperty.of(
+            this::setResources, this::setResources, this::getResources, this::resetResources);
+      default:
+        return null;
+    }
   }
 
   /**

@@ -38,7 +38,6 @@ import games.strategy.engine.random.RandomStats;
 import games.strategy.net.INode;
 import games.strategy.net.Messengers;
 import games.strategy.net.websocket.ClientNetworkBridge;
-import games.strategy.triplea.TripleAPlayer;
 import games.strategy.triplea.delegate.DiceRoll;
 import games.strategy.triplea.settings.ClientSetting;
 import java.io.IOException;
@@ -50,6 +49,9 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import javax.annotation.Nullable;
+import lombok.Getter;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.triplea.java.Interruptibles;
 import org.triplea.java.ThreadRunner;
@@ -68,10 +70,11 @@ public class ServerGame extends AbstractGame {
   private IRandomSource randomSource = new PlainRandomSource();
   private IRandomSource delegateRandomSource;
   private final DelegateExecutionManager delegateExecutionManager = new DelegateExecutionManager();
-  private InGameLobbyWatcherWrapper inGameLobbyWatcher;
+  @Nullable @Getter private final InGameLobbyWatcherWrapper inGameLobbyWatcher;
   private boolean needToInitialize = true;
   private final LaunchAction launchAction;
   private final ClientNetworkBridge clientNetworkBridge;
+  @Setter private boolean delegateAutosavesEnabled = true;
 
   /**
    * When the delegate execution is stopped, we countdown on this latch to prevent the
@@ -81,6 +84,9 @@ public class ServerGame extends AbstractGame {
   /** Has the delegate signaled that delegate execution should stop. */
   private volatile boolean delegateExecutionStopped = false;
 
+  // If true, setting delegateExecutionStopped to true will stop the game (return from startGame()).
+  @Setter private boolean stopGameOnDelegateExecutionStop = false;
+
   public ServerGame(
       final GameData data,
       final Set<Player> localPlayers,
@@ -88,9 +94,28 @@ public class ServerGame extends AbstractGame {
       final Messengers messengers,
       final ClientNetworkBridge clientNetworkBridge,
       final LaunchAction launchAction) {
+    this(
+        data,
+        localPlayers,
+        remotePlayerMapping,
+        messengers,
+        clientNetworkBridge,
+        launchAction,
+        null);
+  }
+
+  public ServerGame(
+      final GameData data,
+      final Set<Player> localPlayers,
+      final Map<String, INode> remotePlayerMapping,
+      final Messengers messengers,
+      final ClientNetworkBridge clientNetworkBridge,
+      final LaunchAction launchAction,
+      @Nullable final InGameLobbyWatcherWrapper inGameLobbyWatcher) {
     super(data, localPlayers, remotePlayerMapping, messengers, clientNetworkBridge);
     this.clientNetworkBridge = clientNetworkBridge;
     this.launchAction = launchAction;
+    this.inGameLobbyWatcher = inGameLobbyWatcher;
     gameModifiedChannel =
         new IGameModifiedChannel() {
           @Override
@@ -282,30 +307,42 @@ public class ServerGame extends AbstractGame {
   /** Starts the game in a new thread. */
   public void startGame() {
     try {
-      // we don't want to notify that the step has been saved when reloading a saved game, since
-      // in fact the step hasn't changed, we are just resuming where we left off
-      final boolean gameHasBeenSaved =
-          gameData.getProperties().get(GAME_HAS_BEEN_SAVED_PROPERTY, false);
-      if (!gameHasBeenSaved) {
-        gameData.getProperties().set(GAME_HAS_BEEN_SAVED_PROPERTY, Boolean.TRUE);
-      }
-      startPersistentDelegates();
-      if (gameHasBeenSaved) {
-        runStep(true);
-      }
+      setUpGameForRunningSteps();
       while (!isGameOver) {
-        if (delegateExecutionStopped) {
-          // the delegate has told us to stop stepping through game steps
-          // don't let this method return, as this method returning signals that the game is over.
-          Interruptibles.await(delegateExecutionStoppedLatch);
-        } else {
-          runStep(false);
-        }
+        runNextStep();
       }
     } catch (final GameOverException e) {
       if (!isGameOver) {
         log.error("GameOverException raised, but game is not over", e);
       }
+    }
+  }
+
+  public void setUpGameForRunningSteps() {
+    // we don't want to notify that the step has been saved when reloading a saved game, since
+    // in fact the step hasn't changed, we are just resuming where we left off
+    final boolean gameHasBeenSaved =
+        gameData.getProperties().get(GAME_HAS_BEEN_SAVED_PROPERTY, false);
+    if (!gameHasBeenSaved) {
+      gameData.getProperties().set(GAME_HAS_BEEN_SAVED_PROPERTY, Boolean.TRUE);
+    }
+    startPersistentDelegates();
+    if (gameHasBeenSaved) {
+      runStep(true);
+    }
+  }
+
+  public void runNextStep() {
+    if (delegateExecutionStopped) {
+      if (stopGameOnDelegateExecutionStop) {
+        stopGame();
+      } else {
+        // the delegate has told us to stop stepping through game steps
+        // don't let this method return, as this method returning signals that the game is over.
+        Interruptibles.await(delegateExecutionStoppedLatch);
+      }
+    } else {
+      runStep(false);
     }
   }
 
@@ -400,15 +437,11 @@ public class ServerGame extends AbstractGame {
     }
     final GameStep currentStep = gameData.getSequence().getStep();
     final IDelegate currentDelegate = currentStep.getDelegate();
-    if (!stepIsRestoredFromSavedGame
-        && currentDelegate.getClass().isAnnotationPresent(AutoSave.class)
-        && currentDelegate.getClass().getAnnotation(AutoSave.class).beforeStepStart()) {
+    if (!stepIsRestoredFromSavedGame && shouldAutoSaveBeforeStart(currentDelegate)) {
       autoSaveBefore(currentDelegate);
     }
     startStep(stepIsRestoredFromSavedGame);
-    if (!stepIsRestoredFromSavedGame
-        && currentDelegate.getClass().isAnnotationPresent(AutoSave.class)
-        && currentDelegate.getClass().getAnnotation(AutoSave.class).afterStepStart()) {
+    if (!stepIsRestoredFromSavedGame && shouldAutoSaveAfterStart(currentDelegate)) {
       autoSaveBefore(currentDelegate);
     }
     if (isGameOver) {
@@ -418,17 +451,10 @@ public class ServerGame extends AbstractGame {
     if (isGameOver) {
       return;
     }
-    // save after the step has advanced
-    // otherwise, the delegate will execute again.
-    final boolean autoSaveThisDelegate =
-        currentDelegate.getClass().isAnnotationPresent(AutoSave.class)
-            && currentDelegate.getClass().getAnnotation(AutoSave.class).afterStepEnd();
-    if (autoSaveThisDelegate && currentStep.getName().endsWith("Move")) {
-      final String stepName = currentStep.getName();
-      // If we are headless we don't want to include the nation in the save game because that would
-      // make it too
-      // difficult to load later.
-      autoSaveAfter(stepName);
+    // save after the step has advanced otherwise, the delegate will execute again.
+    boolean isMoveStep = GameStep.isMoveStep(currentStep.getName());
+    if (isMoveStep && shouldAutoSaveAfterEnd(currentDelegate)) {
+      autoSaveAfter(currentStep.getName());
     }
     endStep();
     if (isGameOver) {
@@ -441,9 +467,27 @@ public class ServerGame extends AbstractGame {
               ? launchAction.getAutoSaveFileUtils().getEvenRoundAutoSaveFile()
               : launchAction.getAutoSaveFileUtils().getOddRoundAutoSaveFile());
     }
-    if (autoSaveThisDelegate && !currentStep.getName().endsWith("Move")) {
+    if (!isMoveStep && shouldAutoSaveAfterEnd(currentDelegate)) {
       autoSaveAfter(currentDelegate);
     }
+  }
+
+  private boolean shouldAutoSaveBeforeStart(IDelegate delegate) {
+    return delegateAutosavesEnabled
+        && delegate.getClass().isAnnotationPresent(AutoSave.class)
+        && delegate.getClass().getAnnotation(AutoSave.class).beforeStepStart();
+  }
+
+  private boolean shouldAutoSaveAfterStart(IDelegate delegate) {
+    return delegateAutosavesEnabled
+        && delegate.getClass().isAnnotationPresent(AutoSave.class)
+        && delegate.getClass().getAnnotation(AutoSave.class).afterStepStart();
+  }
+
+  private boolean shouldAutoSaveAfterEnd(IDelegate delegate) {
+    return delegateAutosavesEnabled
+        && delegate.getClass().isAnnotationPresent(AutoSave.class)
+        && delegate.getClass().getAnnotation(AutoSave.class).afterStepEnd();
   }
 
   private void autoSaveAfter(final String stepName) {
@@ -473,24 +517,24 @@ public class ServerGame extends AbstractGame {
       if (!(delegate instanceof IPersistentDelegate)) {
         continue;
       }
-      final DefaultDelegateBridge bridge =
-          new DefaultDelegateBridge(
-              gameData,
-              this,
-              new DelegateHistoryWriter(messengers),
-              randomStats,
-              delegateExecutionManager,
-              clientNetworkBridge);
       if (delegateRandomSource == null) {
         delegateRandomSource =
             (IRandomSource)
                 delegateExecutionManager.newOutboundImplementation(
                     randomSource, new Class<?>[] {IRandomSource.class});
       }
-      bridge.setRandomSource(delegateRandomSource);
+      final DefaultDelegateBridge bridge =
+          new DefaultDelegateBridge(
+              gameData,
+              this,
+              new DelegateHistoryWriter(messengers, gameData),
+              randomStats,
+              delegateExecutionManager,
+              clientNetworkBridge,
+              delegateRandomSource);
       delegateExecutionManager.enterDelegateExecution();
       try {
-        delegate.setDelegateBridgeAndPlayer(bridge);
+        delegate.setDelegateBridgeAndPlayer(bridge, clientNetworkBridge);
         delegate.start();
       } finally {
         delegateExecutionManager.leaveDelegateExecution();
@@ -500,21 +544,21 @@ public class ServerGame extends AbstractGame {
 
   private void startStep(final boolean stepIsRestoredFromSavedGame) {
     // dont save if we just loaded
-    final DefaultDelegateBridge bridge =
-        new DefaultDelegateBridge(
-            gameData,
-            this,
-            new DelegateHistoryWriter(messengers),
-            randomStats,
-            delegateExecutionManager,
-            clientNetworkBridge);
     if (delegateRandomSource == null) {
       delegateRandomSource =
           (IRandomSource)
               delegateExecutionManager.newOutboundImplementation(
                   randomSource, new Class<?>[] {IRandomSource.class});
     }
-    bridge.setRandomSource(delegateRandomSource);
+    final DefaultDelegateBridge bridge =
+        new DefaultDelegateBridge(
+            gameData,
+            this,
+            new DelegateHistoryWriter(messengers, gameData),
+            randomStats,
+            delegateExecutionManager,
+            clientNetworkBridge,
+            delegateRandomSource);
     // do any initialization of game data for all players here (not based on a delegate, and should
     // not be)
     // we cannot do this the very first run through, because there are no history nodes yet. We
@@ -527,7 +571,7 @@ public class ServerGame extends AbstractGame {
     delegateExecutionManager.enterDelegateExecution();
     try {
       final IDelegate delegate = getCurrentStep().getDelegate();
-      delegate.setDelegateBridgeAndPlayer(bridge);
+      delegate.setDelegateBridgeAndPlayer(bridge, clientNetworkBridge);
       delegate.start();
     } finally {
       delegateExecutionManager.leaveDelegateExecution();
@@ -593,7 +637,7 @@ public class ServerGame extends AbstractGame {
     bridge.getHistoryWriter().startEvent("Game Loaded");
     for (final Player player : localPlayers) {
       allPlayersString.remove(player.getName());
-      final boolean isHuman = player instanceof TripleAPlayer;
+      final boolean isAi = player.isAi();
       bridge
           .getHistoryWriter()
           .addChildToEvent(
@@ -604,10 +648,9 @@ public class ServerGame extends AbstractGame {
                       ? " are"
                       : " is")
                   + " now being played by: "
-                  + player.getPlayerType().getLabel());
+                  + player.getPlayerLabel());
       final GamePlayer p = data.getPlayerList().getPlayerId(player.getName());
-      final String newWhoAmI =
-          ((isHuman ? "Human" : "AI") + ":" + player.getPlayerType().getLabel());
+      final String newWhoAmI = (isAi ? "AI" : "Human") + ":" + player.getPlayerLabel();
       if (!p.getWhoAmI().equals(newWhoAmI)) {
         change.add(ChangeFactory.changePlayerWhoAmIChange(p, newWhoAmI));
       }
@@ -660,16 +703,10 @@ public class ServerGame extends AbstractGame {
     delegateRandomSource = null;
   }
 
-  public InGameLobbyWatcherWrapper getInGameLobbyWatcher() {
-    return inGameLobbyWatcher;
-  }
-
-  public void setInGameLobbyWatcher(final InGameLobbyWatcherWrapper inGameLobbyWatcher) {
-    this.inGameLobbyWatcher = inGameLobbyWatcher;
-  }
-
-  public void stopGameSequence() {
-    delegateExecutionStopped = true;
+  public void stopGameSequence(final String status, final String title) {
+    delegateExecutionStopped =
+        launchAction.promptGameStop(
+            status, title, getResourceLoader().getAssetPaths().stream().findAny().orElseThrow());
   }
 
   public boolean isGameSequenceRunning() {

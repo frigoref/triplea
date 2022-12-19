@@ -26,12 +26,13 @@ import games.strategy.triplea.attachments.UnitAttachment;
 import games.strategy.triplea.delegate.battle.BattleTracker;
 import games.strategy.triplea.delegate.battle.IBattle;
 import games.strategy.triplea.delegate.battle.StrategicBombingRaidBattle;
+import games.strategy.triplea.settings.AbstractClientSettingTestCase;
 import games.strategy.triplea.xml.TestMapGameData;
 import java.util.List;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
 
-class LhtrTest {
+class LhtrTest extends AbstractClientSettingTestCase {
   private final GameData gameData = TestMapGameData.LHTR.getGameData();
 
   private static void thenRemotePlayerShouldNeverBeAskedToConfirmMove(
@@ -114,7 +115,7 @@ class LhtrTest {
   @Test
   void testSubDefenseBonus() {
     final UnitType sub = GameDataTestUtil.submarine(gameData);
-    final UnitAttachment attachment = UnitAttachment.get(sub);
+    final UnitAttachment attachment = sub.getUnitAttachment();
     final GamePlayer japanese = GameDataTestUtil.japanese(gameData);
     // before the advance, subs defend and attack at 2
     assertEquals(2, attachment.getDefense(japanese));

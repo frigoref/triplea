@@ -2,14 +2,16 @@ package games.strategy.triplea.ai.pro;
 
 import games.strategy.engine.data.GameData;
 import games.strategy.engine.data.GamePlayer;
+import games.strategy.engine.data.GameSequence;
 import games.strategy.engine.data.GameState;
 import games.strategy.engine.data.GameStep;
 import games.strategy.engine.data.Territory;
 import games.strategy.engine.data.Unit;
 import games.strategy.engine.delegate.IDelegateBridge;
+import games.strategy.engine.framework.GameDataManager;
 import games.strategy.engine.framework.GameDataUtils;
 import games.strategy.triplea.Properties;
-import games.strategy.triplea.ai.AbstractBuiltInAi;
+import games.strategy.triplea.ai.AbstractAi;
 import games.strategy.triplea.ai.pro.data.ProBattleResult;
 import games.strategy.triplea.ai.pro.data.ProPurchaseTerritory;
 import games.strategy.triplea.ai.pro.data.ProTerritory;
@@ -36,19 +38,21 @@ import games.strategy.triplea.delegate.remote.IMoveDelegate;
 import games.strategy.triplea.delegate.remote.IPurchaseDelegate;
 import games.strategy.triplea.delegate.remote.ITechDelegate;
 import games.strategy.triplea.odds.calculator.IBattleCalculator;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import lombok.Getter;
-import org.triplea.injection.Injections;
 import org.triplea.java.collections.CollectionUtils;
 import org.triplea.util.Tuple;
 
 /** Pro AI. */
-public abstract class AbstractProAi extends AbstractBuiltInAi {
+public abstract class AbstractProAi extends AbstractAi {
 
   private final ProOddsCalculator calc;
   @Getter private final ProData proData;
@@ -69,8 +73,11 @@ public abstract class AbstractProAi extends AbstractBuiltInAi {
   private List<Territory> storedStrafingTerritories;
 
   public AbstractProAi(
-      final String name, final IBattleCalculator battleCalculator, final ProData proData) {
-    super(name);
+      final String name,
+      final IBattleCalculator battleCalculator,
+      final ProData proData,
+      final String playerLabel) {
+    super(name, playerLabel);
     this.proData = proData;
     calc = new ProOddsCalculator(battleCalculator);
     combatMoveAi = new ProCombatMoveAi(this);
@@ -84,8 +91,6 @@ public abstract class AbstractProAi extends AbstractBuiltInAi {
     storedPurchaseTerritories = null;
     storedPoliticalActions = null;
     storedStrafingTerritories = new ArrayList<>();
-
-    ProLogUi.registerDebugMenu();
   }
 
   @Override
@@ -118,13 +123,16 @@ public abstract class AbstractProAi extends AbstractBuiltInAi {
       final IMoveDelegate moveDel,
       final GameData data,
       final GamePlayer player) {
-    final long start = System.currentTimeMillis();
+    final Instant start = Instant.now();
     ProLogUi.notifyStartOfRound(data.getSequence().getRound(), player.getName());
     initializeData();
     prepareData(data);
+    boolean didCombatMove = false;
+    boolean didNonCombatMove = false;
     if (nonCombat) {
       nonCombatMoveAi.doNonCombatMove(storedFactoryMoveMap, storedPurchaseTerritories, moveDel);
       storedFactoryMoveMap = null;
+      didNonCombatMove = true;
     } else {
       if (storedCombatMoveMap == null) {
         combatMoveAi.doCombatMove(moveDel);
@@ -132,13 +140,21 @@ public abstract class AbstractProAi extends AbstractBuiltInAi {
         combatMoveAi.doMove(storedCombatMoveMap, moveDel, data, player);
         storedCombatMoveMap = null;
       }
+      didCombatMove = true;
+      // Some maps only have a single "combat" move phase. For these, do "non-combat" moves too,
+      // after combat moves.
+      if (!hasNonCombatMove(getGameStepsForPlayer(data, player, 0))) {
+        nonCombatMoveAi.doNonCombatMove(storedFactoryMoveMap, storedPurchaseTerritories, moveDel);
+        storedFactoryMoveMap = null;
+        didNonCombatMove = true;
+      }
     }
+
+    Duration delta = Duration.between(start, Instant.now());
     ProLogger.info(
-        player.getName()
-            + " time for nonCombat="
-            + nonCombat
-            + " time="
-            + (System.currentTimeMillis() - start));
+        String.format(
+            "%s move (didCombatMove=%s  didNonCombatMove=%s) time=%s",
+            player.getName(), didCombatMove, didNonCombatMove, delta.toMillis()));
   }
 
   @Override
@@ -158,7 +174,6 @@ public abstract class AbstractProAi extends AbstractBuiltInAi {
       prepareData(data);
       storedPurchaseTerritories = purchaseAi.bid(pusToSpend, purchaseDelegate, data);
     } else {
-
       // Repair factories
       purchaseAi.repair(pusToSpend, purchaseDelegate, data, player);
 
@@ -168,7 +183,7 @@ public abstract class AbstractProAi extends AbstractBuiltInAi {
       final List<Territory> possibleFactoryTerritories =
           CollectionUtils.getMatches(
               data.getMap().getTerritories(),
-              ProMatches.territoryHasNoInfraFactoryAndIsNotConqueredOwnedLand(player, data));
+              ProMatches.territoryHasNoInfraFactoryAndIsNotConqueredOwnedLand(player));
       if (purchaseTerritories.isEmpty() && possibleFactoryTerritories.isEmpty()) {
         ProLogger.info("No possible place or factory territories owned so exiting purchase logic");
         return;
@@ -176,43 +191,22 @@ public abstract class AbstractProAi extends AbstractBuiltInAi {
       ProLogger.info("Starting simulation for purchase phase");
 
       // Setup data copy and delegates
-      final GameData dataCopy;
-      try {
-        data.acquireWriteLock();
-        dataCopy =
-            GameDataUtils.cloneGameDataWithoutHistory(
-                    data, true, Injections.getInstance().getEngineVersion())
-                .orElse(null);
-        if (dataCopy == null) {
-          return;
-        }
-      } finally {
-        data.releaseWriteLock();
+      final GameData dataCopy = copyData(data);
+      if (dataCopy == null) {
+        return;
       }
-      prepareData(dataCopy);
       final GamePlayer playerCopy = dataCopy.getPlayerList().getPlayerId(player.getName());
       final IMoveDelegate moveDel = dataCopy.getMoveDelegate();
       final IDelegateBridge bridge = new ProDummyDelegateBridge(this, playerCopy, dataCopy);
       moveDel.setDelegateBridgeAndPlayer(bridge);
 
-      // Determine turn sequence
-      final List<GameStep> gameSteps = new ArrayList<>();
-      for (final GameStep gameStep : dataCopy.getSequence()) {
-        gameSteps.add(gameStep);
-      }
-
       // Simulate the next phases until place/end of turn is reached then use simulated data for
       // purchase
-      final int nextStepIndex = dataCopy.getSequence().getStepIndex() + 1;
-      for (int i = nextStepIndex; i < gameSteps.size(); i++) {
-        final GameStep step = gameSteps.get(i);
-        if (!playerCopy.equals(step.getPlayerId())) {
-          continue;
-        }
-        dataCopy
-            .getSequence()
-            .setRoundAndStep(
-                dataCopy.getSequence().getRound(), step.getDisplayName(), step.getPlayerId());
+      final GameSequence sequence = dataCopy.getSequence();
+      final int nextStepIndex = sequence.getStepIndex() + 1;
+      final List<GameStep> gameSteps = getGameStepsForPlayer(dataCopy, playerCopy, nextStepIndex);
+      for (final GameStep step : gameSteps) {
+        sequence.setRoundAndStep(sequence.getRound(), step.getDisplayName(), step.getPlayerId());
         final String stepName = step.getName();
         ProLogger.info("Simulating phase: " + stepName);
         if (GameStep.isNonCombatMoveStep(stepName)) {
@@ -230,6 +224,25 @@ public abstract class AbstractProAi extends AbstractBuiltInAi {
           if (storedCombatMoveMap == null) {
             storedCombatMoveMap =
                 ProSimulateTurnUtils.transferMoveMap(proData, moveMap, data, player);
+          }
+          // Some maps only have a combat move. For these, do both types of moves during this phase.
+          if (!hasNonCombatMove(gameSteps)) {
+            // Copy the data so we can simulate battles on it, in order to choose our "non combat"
+            // moves based on that (estimated) board state.
+            final GameData dataCopy2 = copyData(data);
+            if (dataCopy2 == null) {
+              return;
+            }
+            final GamePlayer playerCopy2 = dataCopy2.getPlayerList().getPlayerId(player.getName());
+            proData.initializeSimulation(this, dataCopy2, playerCopy2);
+            ProSimulateTurnUtils.simulateBattles(proData, dataCopy2, playerCopy2, bridge, calc);
+            proData.initializeSimulation(this, dataCopy2, playerCopy2);
+            Map<Territory, ProTerritory> factoryMoveMap =
+                nonCombatMoveAi.simulateNonCombatMove(moveDel);
+            if (storedFactoryMoveMap == null) {
+              storedFactoryMoveMap =
+                  ProSimulateTurnUtils.transferMoveMap(proData, factoryMoveMap, data, player);
+            }
           }
         } else if (GameStep.isBattleStep(stepName)) {
           proData.initializeSimulation(this, dataCopy, playerCopy);
@@ -253,6 +266,30 @@ public abstract class AbstractProAi extends AbstractBuiltInAi {
       }
     }
     ProLogger.info(player.getName() + " time for purchase=" + (System.currentTimeMillis() - start));
+  }
+
+  private GameData copyData(GameData data) {
+    GameDataManager.Options options = GameDataManager.Options.builder().withDelegates(true).build();
+    GameData dataCopy = GameDataUtils.cloneGameData(data, options).orElse(null);
+    Optional.ofNullable(dataCopy).ifPresent(this::prepareData);
+    return dataCopy;
+  }
+
+  private static List<GameStep> getGameStepsForPlayer(
+      GameData gameData, GamePlayer gamePlayer, int startStep) {
+    int stepIndex = 0;
+    final List<GameStep> gameSteps = new ArrayList<>();
+    for (final GameStep gameStep : gameData.getSequence()) {
+      if (stepIndex >= startStep && gamePlayer.equals(gameStep.getPlayerId())) {
+        gameSteps.add(gameStep);
+      }
+      stepIndex++;
+    }
+    return gameSteps;
+  }
+
+  private boolean hasNonCombatMove(Collection<GameStep> steps) {
+    return steps.stream().anyMatch(s -> GameStep.isNonCombatMoveStep(s.getName()));
   }
 
   @Override
@@ -301,7 +338,7 @@ public abstract class AbstractProAi extends AbstractBuiltInAi {
     final Collection<Unit> attackers = battle.getAttackingUnits();
     final Collection<Unit> defenders = battle.getDefendingUnits();
     final double strengthDifference =
-        ProBattleUtils.estimateStrengthDifference(proData, battleTerritory, attackers, defenders);
+        ProBattleUtils.estimateStrengthDifference(battleTerritory, attackers, defenders);
     final boolean isStrafing = isAttacker && storedStrafingTerritories.contains(battleTerritory);
     ProLogger.info(
         player.getName()
@@ -386,7 +423,7 @@ public abstract class AbstractProAi extends AbstractBuiltInAi {
         final Collection<Unit> defenders = new ArrayList<>(battle.getDefendingUnits());
         defenders.removeAll(defaultCasualties.getKilled());
         final double strengthDifference =
-            ProBattleUtils.estimateStrengthDifference(proData, battleSite, attackers, defenders);
+            ProBattleUtils.estimateStrengthDifference(battleSite, attackers, defenders);
         int minStrengthDifference = 60;
         if (!Properties.getLowLuck(data.getProperties())) {
           minStrengthDifference = 55;

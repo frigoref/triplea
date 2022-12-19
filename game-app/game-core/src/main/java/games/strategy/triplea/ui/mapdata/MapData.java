@@ -5,8 +5,6 @@ import games.strategy.engine.data.GameState;
 import games.strategy.engine.data.Territory;
 import games.strategy.triplea.ResourceLoader;
 import games.strategy.triplea.image.UnitImageFactory;
-import games.strategy.triplea.ui.UiContext;
-import games.strategy.ui.Util;
 import java.awt.Color;
 import java.awt.Dimension;
 import java.awt.Image;
@@ -53,7 +51,6 @@ public class MapData {
   public static final String PROPERTY_SCREENSHOT_TITLE_Y = "screenshot.title.y";
   public static final String PROPERTY_SCREENSHOT_TITLE_COLOR = "screenshot.title.color";
   public static final String PROPERTY_SCREENSHOT_TITLE_FONT_SIZE = "screenshot.title.font.size";
-  public static final String PROPERTY_COLOR_PREFIX = "color.";
   public static final String PROPERTY_MAP_WIDTH = "map.width";
   public static final String PROPERTY_MAP_HEIGHT = "map.height";
   public static final String PROPERTY_MAP_SCROLLWRAPX = "map.scrollWrapX";
@@ -133,24 +130,27 @@ public class MapData {
   @Nullable private final Image errorImage;
   @Nullable private final Image warningImage;
 
+  private final ResourceLoader loader;
+
   public MapData(final ResourceLoader loader) {
+    this.loader = loader;
     try {
-      place.putAll(readOptionalPlacementsOneToMany(loader, PLACEMENT_FILE));
-      territoryEffects.putAll(readOptionalPointsOneToMany(loader, TERRITORY_EFFECT_FILE));
+      place.putAll(readOptionalPlacementsOneToMany(PLACEMENT_FILE));
+      territoryEffects.putAll(readOptionalPointsOneToMany(TERRITORY_EFFECT_FILE));
 
       polys.putAll(
           PointFileReaderWriter.readOneToManyPolygons(loader.requiredResource(POLYGON_FILE)));
       centers.putAll(PointFileReaderWriter.readOneToOne(loader.requiredResource(CENTERS_FILE)));
-      vcPlace.putAll(readOptionalPointsOneToOne(loader, VC_MARKERS));
-      convoyPlace.putAll(readOptionalPointsOneToOne(loader, CONVOY_MARKERS));
-      commentPlace.putAll(readOptionalPointsOneToOne(loader, COMMENT_MARKERS));
-      blockadePlace.putAll(readOptionalPointsOneToOne(loader, BLOCKADE_MARKERS));
-      capitolPlace.putAll(readOptionalPointsOneToOne(loader, CAPITAL_MARKERS));
-      puPlace.putAll(readOptionalPointsOneToOne(loader, PU_PLACE_FILE));
-      namePlace.putAll(readOptionalPointsOneToOne(loader, TERRITORY_NAME_PLACE_FILE));
-      kamikazePlace.putAll(readOptionalPointsOneToOne(loader, KAMIKAZE_FILE));
-      decorations.putAll(loadDecorations(loader));
-      territoryNameImages.putAll(territoryNameImages(loader));
+      vcPlace.putAll(readOptionalPointsOneToOne(VC_MARKERS));
+      convoyPlace.putAll(readOptionalPointsOneToOne(CONVOY_MARKERS));
+      commentPlace.putAll(readOptionalPointsOneToOne(COMMENT_MARKERS));
+      blockadePlace.putAll(readOptionalPointsOneToOne(BLOCKADE_MARKERS));
+      capitolPlace.putAll(readOptionalPointsOneToOne(CAPITAL_MARKERS));
+      puPlace.putAll(readOptionalPointsOneToOne(PU_PLACE_FILE));
+      namePlace.putAll(readOptionalPointsOneToOne(TERRITORY_NAME_PLACE_FILE));
+      kamikazePlace.putAll(readOptionalPointsOneToOne(KAMIKAZE_FILE));
+      decorations.putAll(loadDecorations());
+      territoryNameImages.putAll(territoryNameImages());
 
       try (InputStream inputStream =
           Files.newInputStream(loader.requiredResource(MAP_PROPERTIES))) {
@@ -171,25 +171,22 @@ public class MapData {
     warningImage = loader.loadImage("misc/warning.gif").orElse(null);
   }
 
-  private static Map<String, Point> readOptionalPointsOneToOne(
-      final ResourceLoader loader, final String path) throws IOException {
-    return readOptionalMap(loader, path, PointFileReaderWriter::readOneToOne);
+  private Map<String, Point> readOptionalPointsOneToOne(final String path) throws IOException {
+    return readOptionalMap(path, PointFileReaderWriter::readOneToOne);
   }
 
-  private static Map<String, List<Point>> readOptionalPointsOneToMany(
-      final ResourceLoader loader, final String path) throws IOException {
-    return readOptionalMap(loader, path, PointFileReaderWriter::readOneToMany);
+  private Map<String, List<Point>> readOptionalPointsOneToMany(final String path)
+      throws IOException {
+    return readOptionalMap(path, PointFileReaderWriter::readOneToMany);
   }
 
-  private static Map<String, Tuple<List<Point>, Boolean>> readOptionalPlacementsOneToMany(
-      final ResourceLoader loader, final String path) throws IOException {
-    return readOptionalMap(loader, path, PointFileReaderWriter::readOneToManyPlacements);
+  private Map<String, Tuple<List<Point>, Boolean>> readOptionalPlacementsOneToMany(
+      final String path) throws IOException {
+    return readOptionalMap(path, PointFileReaderWriter::readOneToManyPlacements);
   }
 
-  private static <K, V> Map<K, V> readOptionalMap(
-      final ResourceLoader loader,
-      final String path,
-      final ThrowingFunction<Path, Map<K, V>, IOException> mapper)
+  private <K, V> Map<K, V> readOptionalMap(
+      final String path, final ThrowingFunction<Path, Map<K, V>, IOException> mapper)
       throws IOException {
     @Nullable final Path resourcePath = loader.optionalResource(path).orElse(null);
     if (resourcePath != null) {
@@ -206,39 +203,35 @@ public class MapData {
     return Boolean.parseBoolean(mapProperties.getProperty(PROPERTY_MAP_SCROLLWRAPY, "false"));
   }
 
-  private Map<String, Image> territoryNameImages(final ResourceLoader resourceLoader) {
-    if (!resourceLoader.hasPath("territoryNames/")) {
+  private Map<String, Image> territoryNameImages() {
+    if (!loader.hasPath("territoryNames/")) {
       return new HashMap<>();
     }
 
     final Map<String, Image> territoryNameImages = new HashMap<>();
     for (final String name : centers.keySet()) {
-      final Optional<Image> territoryNameImage = loadTerritoryNameImage(resourceLoader, name);
+      final Optional<Image> territoryNameImage = loadTerritoryNameImage(name);
 
       territoryNameImage.ifPresent(image -> territoryNameImages.put(name, image));
     }
     return territoryNameImages;
   }
 
-  private Optional<Image> loadTerritoryNameImage(
-      final ResourceLoader resourceLoader, final String imageName) {
+  private Optional<Image> loadTerritoryNameImage(final String imageName) {
     // try first file names that have underscores instead of spaces
     final String normalizedName = imageName.replace(' ', '_');
-    return resourceLoader
+    return loader
         .loadImage(constructTerritoryNameImagePath(normalizedName))
-        .or(() -> resourceLoader.loadImage(constructTerritoryNameImagePath(imageName)));
+        .or(() -> loader.loadImage(constructTerritoryNameImagePath(imageName)));
   }
 
   private static String constructTerritoryNameImagePath(final String baseName) {
     return "territoryNames/" + baseName + ".png";
   }
 
-  private Map<Image, List<Point>> loadDecorations(final ResourceLoader resourceLoader)
-      throws IOException {
-    return readOptionalPointsOneToMany(resourceLoader, DECORATIONS_FILE).entrySet().stream()
-        .map(
-            entry ->
-                Map.entry(resourceLoader.loadImage("misc/" + entry.getKey()), entry.getValue()))
+  private Map<Image, List<Point>> loadDecorations() throws IOException {
+    return readOptionalPointsOneToMany(DECORATIONS_FILE).entrySet().stream()
+        .map(entry -> Map.entry(loader.loadImage("misc/" + entry.getKey()), entry.getValue()))
         .filter(entry -> entry.getKey().isPresent())
         .collect(Collectors.toMap(entry -> entry.getKey().orElseThrow(), Entry::getValue));
   }
@@ -611,23 +604,25 @@ public class MapData {
   }
 
   /** Get the territory at the x,y co-ordinates could be null. */
-  public String getTerritoryAt(final double x, final double y) {
-    String seaName = null;
+  public @Nullable String getTerritoryAt(final double x, final double y) {
     // try to find a land territory.
     // sea zones often surround a land territory
+    int smallestArea = Integer.MAX_VALUE;
+    @Nullable String closestMatch = null;
     for (final String name : polys.keySet()) {
       final Collection<Polygon> polygons = polys.get(name);
       for (final Polygon poly : polygons) {
         if (poly.contains(x, y)) {
-          if (Util.isTerritoryNameIndicatingWater(name)) {
-            seaName = name;
-          } else {
-            return name;
+          Dimension size = poly.getBounds().getSize();
+          int area = size.width * size.height;
+          if (area < smallestArea) {
+            closestMatch = name;
+            smallestArea = area;
           }
         }
       }
     }
-    return seaName;
+    return closestMatch;
   }
 
   public Dimension getMapDimensions() {
@@ -690,16 +685,13 @@ public class MapData {
     final boolean scrollWrapY = this.scrollWrapY();
     for (final Polygon item : polys) {
       // if our rectangle is on the right side (mapscrollx) then we push it to be on the negative
-      // left side, so that the
-      // bounds.x will be negative
+      // left side, so that the bounds.x will be negative
       // this solves the issue of maps that have a territory where polygons were on both sides of
-      // the map divide
-      // (so our bounds.x was 0, and our bounds.y would be the entire map width)
+      // the map divide (so our bounds.x was 0, and our bounds.y would be the entire map width)
       // (when in fact it should actually be bounds.x = -10 or something, and bounds.width = 20 or
       // something)
       // we use map dimensions.width * 0.9 because the polygon may not actually touch the side of
-      // the map (like if the
-      // territory borders are thick)
+      // the map (like if the territory borders are thick)
       final Rectangle itemRect = item.getBounds();
       if (scrollWrapX && itemRect.getMaxX() >= closeToMapWidth) {
         itemRect.translate(-mapWidth, 0);
@@ -749,10 +741,11 @@ public class MapData {
   }
 
   public List<Point> getTerritoryEffectPoints(final Territory territory) {
-    if (territoryEffects.get(territory.getName()) == null) {
+    List<Point> points = territoryEffects.get(territory.getName());
+    if (points == null) {
       return List.of(getCenter(territory));
     }
-    return territoryEffects.get(territory.getName());
+    return points;
   }
 
   public Optional<Image> getTerritoryEffectImage(final String effectName) {
@@ -763,9 +756,9 @@ public class MapData {
               String largeImageName = "territoryEffects/" + effectName + "_large.png";
               String standardImageName = "territoryEffects/" + effectName + ".png";
 
-              return UiContext.getResourceLoader()
+              return loader
                   .loadImage(largeImageName)
-                  .or(() -> UiContext.getResourceLoader().loadImage(standardImageName))
+                  .or(() -> loader.loadImage(standardImageName))
                   .orElse(null);
             }));
   }

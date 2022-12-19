@@ -1,7 +1,6 @@
 package games.strategy.triplea.attachments;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.collect.ImmutableMap;
 import games.strategy.engine.data.Attachable;
 import games.strategy.engine.data.GameData;
 import games.strategy.engine.data.GamePlayer;
@@ -19,6 +18,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
+import javax.annotation.Nullable;
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
 import lombok.EqualsAndHashCode;
@@ -27,12 +27,13 @@ import org.triplea.java.collections.CollectionUtils;
 
 /**
  * An attachment, attached to a player that will describe which political actions a player may take.
+ * Note: Empty collection fields default to null to minimize memory use and serialization size.
  */
 public class PoliticalActionAttachment extends AbstractUserActionAttachment {
   private static final long serialVersionUID = 4392770599777282477L;
 
   // list of relationship changes to be performed if this action is performed successfully
-  private List<String> relationshipChange = new ArrayList<>();
+  private @Nullable List<String> relationshipChange = null;
 
   public PoliticalActionAttachment(
       final String name, final Attachable attachable, final GameData gameData) {
@@ -126,7 +127,10 @@ public class PoliticalActionAttachment extends AbstractUserActionAttachment {
               + getName()
               + thisErrorMsg());
     }
-    relationshipChange.add(relChange);
+    if (relationshipChange == null) {
+      relationshipChange = new ArrayList<>();
+    }
+    relationshipChange.add(relChange.intern());
   }
 
   private void setRelationshipChange(final List<String> value) {
@@ -134,15 +138,15 @@ public class PoliticalActionAttachment extends AbstractUserActionAttachment {
   }
 
   private List<String> getRelationshipChange() {
-    return relationshipChange;
+    return getListProperty(relationshipChange);
   }
 
   private void resetRelationshipChange() {
-    relationshipChange = new ArrayList<>();
+    relationshipChange = null;
   }
 
   public List<RelationshipChange> getRelationshipChanges() {
-    return relationshipChange.stream()
+    return getRelationshipChange().stream()
         .map(this::parseRelationshipChange)
         .collect(Collectors.toList());
   }
@@ -159,7 +163,7 @@ public class PoliticalActionAttachment extends AbstractUserActionAttachment {
   /** Returns a set of all other players involved in this PoliticalAction. */
   public Set<GamePlayer> getOtherPlayers() {
     final Set<GamePlayer> otherPlayers = new LinkedHashSet<>();
-    for (final String relationshipChange : this.relationshipChange) {
+    for (final String relationshipChange : getRelationshipChange()) {
       final String[] s = splitOnColon(relationshipChange);
       otherPlayers.add(getData().getPlayerList().getPlayerId(s[0]));
       otherPlayers.add(getData().getPlayerList().getPlayerId(s[1]));
@@ -173,35 +177,35 @@ public class PoliticalActionAttachment extends AbstractUserActionAttachment {
       final GamePlayer player,
       final Map<ICondition, Boolean> testedConditions,
       final GameState data) {
-    if (!Properties.getUsePolitics(data.getProperties()) || !player.amNotDeadYet(data.getMap())) {
+    if (!Properties.getUsePolitics(data.getProperties()) || !player.amNotDeadYet()) {
       return new ArrayList<>();
     }
     return CollectionUtils.getMatches(
         getPoliticalActionAttachments(player),
-        Matches.politicalActionAffectsAtLeastOneAlivePlayer(player, data.getMap())
+        Matches.politicalActionAffectsAtLeastOneAlivePlayer(player)
             .and(Matches.abstractUserActionAttachmentCanBeAttempted(testedConditions)));
   }
 
   @Override
   public void validate(final GameState data) throws GameParseException {
     super.validate(data);
-    if (relationshipChange.isEmpty()) {
+    if (relationshipChange == null) {
       throw new GameParseException("value: relationshipChange can't be empty" + thisErrorMsg());
     }
   }
 
   @Override
-  public Map<String, MutableProperty<?>> getPropertyMap() {
-    return ImmutableMap.<String, MutableProperty<?>>builder()
-        .putAll(super.getPropertyMap())
-        .put(
-            "relationshipChange",
-            MutableProperty.of(
-                this::setRelationshipChange,
-                this::setRelationshipChange,
-                this::getRelationshipChange,
-                this::resetRelationshipChange))
-        .build();
+  public MutableProperty<?> getPropertyOrNull(String propertyName) {
+    switch (propertyName) {
+      case "relationshipChange":
+        return MutableProperty.of(
+            this::setRelationshipChange,
+            this::setRelationshipChange,
+            this::getRelationshipChange,
+            this::resetRelationshipChange);
+      default:
+        return super.getPropertyOrNull(propertyName);
+    }
   }
 
   /**

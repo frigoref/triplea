@@ -9,14 +9,16 @@ import games.strategy.triplea.ai.pro.ProData;
 import games.strategy.triplea.ai.pro.util.ProMatches;
 import games.strategy.triplea.ai.pro.util.ProOddsCalculator;
 import games.strategy.triplea.delegate.Matches;
-import games.strategy.triplea.delegate.TransportTracker;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Predicate;
+import java.util.function.Supplier;
 import org.triplea.java.collections.CollectionUtils;
 
 /** The result of an AI territory analysis. */
@@ -24,7 +26,7 @@ public class ProTerritory {
 
   private final ProData proData;
   private final Territory territory;
-  private final List<Unit> maxUnits;
+  private final Set<Unit> maxUnits;
   private final List<Unit> units;
   private final List<Unit> bombers;
   private ProBattleResult maxBattleResult;
@@ -64,7 +66,7 @@ public class ProTerritory {
   public ProTerritory(final Territory territory, final ProData proData) {
     this.territory = territory;
     this.proData = proData;
-    maxUnits = new ArrayList<>();
+    maxUnits = new HashSet<>();
     units = new ArrayList<>();
     bombers = new ArrayList<>();
     maxBattleResult = new ProBattleResult();
@@ -101,7 +103,7 @@ public class ProTerritory {
   ProTerritory(final ProTerritory patd, final ProData proData) {
     this.territory = patd.getTerritory();
     this.proData = proData;
-    maxUnits = new ArrayList<>(patd.getMaxUnits());
+    maxUnits = new HashSet<>(patd.getMaxUnits());
     units = new ArrayList<>(patd.getUnits());
     bombers = new ArrayList<>(patd.getBombers());
     maxBattleResult = patd.getMaxBattleResult();
@@ -143,6 +145,15 @@ public class ProTerritory {
     return defenders;
   }
 
+  public Collection<Unit> getEligibleDefenders(GamePlayer player) {
+    Collection<Unit> defendingUnits = getAllDefenders();
+    if (getTerritory().isWater()) {
+      return defendingUnits;
+    }
+    return CollectionUtils.getMatches(
+        defendingUnits, ProMatches.unitIsAlliedNotOwnedAir(player).negate());
+  }
+
   public Collection<Unit> getAllDefendersForCarrierCalcs(
       final GameState data, final GamePlayer player) {
     if (Properties.getProduceNewFightersOnOldCarriers(data.getProperties())) {
@@ -165,11 +176,9 @@ public class ProTerritory {
     return defenders;
   }
 
-  public List<Unit> getMaxEnemyDefenders(final GamePlayer player, final GameState data) {
+  public List<Unit> getMaxEnemyDefenders(final GamePlayer player) {
     final List<Unit> defenders =
-        territory
-            .getUnitCollection()
-            .getMatches(Matches.enemyUnit(player, data.getRelationshipTracker()));
+        territory.getUnitCollection().getMatches(Matches.enemyUnit(player));
     defenders.addAll(maxScrambleUnits);
     return defenders;
   }
@@ -203,7 +212,7 @@ public class ProTerritory {
     return territory;
   }
 
-  public List<Unit> getMaxUnits() {
+  public Set<Unit> getMaxUnits() {
     return maxUnits;
   }
 
@@ -252,14 +261,13 @@ public class ProTerritory {
   }
 
   public void putAllAmphibAttackMap(final Map<Unit, List<Unit>> amphibAttackMap) {
-    for (final Unit u : amphibAttackMap.keySet()) {
-      putAmphibAttackMap(u, amphibAttackMap.get(u));
-    }
+    amphibAttackMap.forEach((unit, amphibUnits) -> putAmphibAttackMap(unit, amphibUnits));
   }
 
   public void putAmphibAttackMap(final Unit transport, final List<Unit> amphibUnits) {
     this.amphibAttackMap.put(transport, amphibUnits);
-    this.isTransportingMap.put(transport, TransportTracker.isTransporting(transport));
+    this.isTransportingMap.put(
+        transport, transport.isTransporting(proData.getUnitTerritory(transport)));
   }
 
   public void setCanAttack(final boolean canAttack) {
@@ -288,7 +296,7 @@ public class ProTerritory {
             proData,
             territory,
             getUnits(),
-            getMaxEnemyDefenders(player, player.getData()),
+            getMaxEnemyDefenders(player),
             getBombardTerritoryMap().keySet()));
   }
 
@@ -299,6 +307,12 @@ public class ProTerritory {
     } else if (battleResult.getWinPercentage() >= proData.getWinPercentage()
         && battleResult.isHasLandUnitRemaining()) {
       currentlyWins = true;
+    }
+  }
+
+  public void setBattleResultIfNull(final Supplier<ProBattleResult> supplier) {
+    if (battleResult == null) {
+      setBattleResult(supplier.get());
     }
   }
 
@@ -319,11 +333,15 @@ public class ProTerritory {
   }
 
   public List<Unit> getCantMoveUnits() {
-    return cantMoveUnits;
+    return Collections.unmodifiableList(cantMoveUnits);
   }
 
   public void addCantMoveUnit(final Unit unit) {
     this.cantMoveUnits.add(unit);
+  }
+
+  public void addCantMoveUnits(final Collection<Unit> units) {
+    this.cantMoveUnits.addAll(units);
   }
 
   public void setMaxEnemyUnits(final List<Unit> maxEnemyUnits) {
@@ -434,5 +452,9 @@ public class ProTerritory {
 
   public List<Unit> getBombers() {
     return bombers;
+  }
+
+  public Set<Territory> getNeighbors(Predicate<Territory> predicate) {
+    return proData.getData().getMap().getNeighbors(territory, predicate);
   }
 }

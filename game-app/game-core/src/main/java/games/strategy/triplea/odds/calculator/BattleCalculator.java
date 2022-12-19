@@ -9,20 +9,23 @@ import games.strategy.engine.data.Territory;
 import games.strategy.engine.data.TerritoryEffect;
 import games.strategy.engine.data.Unit;
 import games.strategy.engine.data.changefactory.ChangeFactory;
+import games.strategy.engine.framework.GameDataManager;
 import games.strategy.engine.framework.GameDataUtils;
-import games.strategy.triplea.delegate.GameDelegateBridge;
 import games.strategy.triplea.delegate.battle.BattleResults;
 import games.strategy.triplea.delegate.battle.BattleTracker;
 import games.strategy.triplea.delegate.battle.MustFightBattle;
+import games.strategy.triplea.util.TuvCostsCalculator;
 import java.util.Collection;
+import java.util.HashSet;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 import javax.annotation.Nonnull;
 import lombok.Setter;
-import org.triplea.util.Version;
 
 class BattleCalculator implements IBattleCalculator {
   @Nonnull private final GameData gameData;
+  // Use a single TuvCostsCalculator so its computations are cached.
+  private final TuvCostsCalculator tuvCalculator = new TuvCostsCalculator();
   @Setter private boolean keepOneAttackingLandUnit = false;
   @Setter private boolean amphibious = false;
   @Setter private int retreatAfterRound = -1;
@@ -32,14 +35,14 @@ class BattleCalculator implements IBattleCalculator {
   private volatile boolean cancelled = false;
   private final AtomicBoolean isRunning = new AtomicBoolean(false);
 
-  BattleCalculator(
-      final GameData data, final boolean dataHasAlreadyBeenCloned, final Version engineVersion) {
+  BattleCalculator(GameData data) {
     gameData =
-        Preconditions.checkNotNull(
-            dataHasAlreadyBeenCloned
-                ? data
-                : GameDataUtils.cloneGameData(data, false, engineVersion).orElse(null),
-            "Error cloning game data (low memory?)");
+        GameDataUtils.cloneGameData(data, GameDataManager.Options.forBattleCalculator())
+            .orElseThrow();
+  }
+
+  BattleCalculator(byte[] data) {
+    gameData = GameDataUtils.createGameDataFromBytes(data).orElseThrow();
   }
 
   @Override
@@ -57,15 +60,13 @@ class BattleCalculator implements IBattleCalculator {
         !isRunning.getAndSet(true), "Can't calculate while operation is still running!");
     try {
       final GamePlayer attacker2 =
-          gameData
-              .getPlayerList()
-              .getPlayerId(
-                  attacker == null ? GamePlayer.NULL_PLAYERID.getName() : attacker.getName());
+          attacker == null
+              ? gameData.getPlayerList().getNullPlayer()
+              : gameData.getPlayerList().getPlayerId(attacker.getName());
       final GamePlayer defender2 =
-          gameData
-              .getPlayerList()
-              .getPlayerId(
-                  defender == null ? GamePlayer.NULL_PLAYERID.getName() : defender.getName());
+          defender == null
+              ? gameData.getPlayerList().getNullPlayer()
+              : gameData.getPlayerList().getPlayerId(defender.getName());
       final Territory location2 = gameData.getMap().getTerritory(location.getName());
       final Collection<Unit> attackingUnits =
           GameDataUtils.translateIntoOtherGameData(attacking, gameData);
@@ -76,15 +77,11 @@ class BattleCalculator implements IBattleCalculator {
       final Collection<TerritoryEffect> territoryEffects2 =
           GameDataUtils.translateIntoOtherGameData(territoryEffects, gameData);
       gameData.performChange(ChangeFactory.removeUnits(location2, location2.getUnits()));
-      gameData.performChange(ChangeFactory.addUnits(location2, attackingUnits));
-      gameData.performChange(ChangeFactory.addUnits(location2, defendingUnits));
+      gameData.performChange(
+          ChangeFactory.addUnits(location2, mergeUnitCollections(attackingUnits, defendingUnits)));
       final long start = System.currentTimeMillis();
       final AggregateResults aggregateResults = new AggregateResults(runCount);
       final BattleTracker battleTracker = new BattleTracker();
-      // CasualtySortingCaching can cause issues if there is more than 1 one battle being calculated
-      // at the same time (like if the AI and a human are both using the calc)
-      // TODO: first, see how much it actually speeds stuff up by, and if it does make a difference
-      // then convert it to a per-thread, per-calc caching
       final List<Unit> attackerOrderOfLosses =
           OrderOfLossesInputPanel.getUnitListByOrderOfLoss(
               this.attackerOrderOfLosses, attackingUnits, gameData);
@@ -93,7 +90,7 @@ class BattleCalculator implements IBattleCalculator {
               this.defenderOrderOfLosses, defendingUnits, gameData);
       for (int i = 0; i < runCount && !cancelled; i++) {
         final CompositeChange allChanges = new CompositeChange();
-        final DummyDelegateBridge bridge1 =
+        final DummyDelegateBridge bridge =
             new DummyDelegateBridge(
                 attacker2,
                 gameData,
@@ -103,8 +100,8 @@ class BattleCalculator implements IBattleCalculator {
                 keepOneAttackingLandUnit,
                 retreatAfterRound,
                 retreatAfterXUnitsLeft,
-                retreatWhenOnlyAirLeft);
-        final GameDelegateBridge bridge = new GameDelegateBridge(bridge1);
+                retreatWhenOnlyAirLeft,
+                tuvCalculator);
         final MustFightBattle battle =
             new MustFightBattle(location2, attacker2, gameData, battleTracker);
         battle.setHeadless(true);
@@ -123,7 +120,7 @@ class BattleCalculator implements IBattleCalculator {
         }
         battle.setUnits(
             defendingUnits, attackingUnits, bombardingUnits, defender2, territoryEffects2);
-        bridge1.setBattle(battle);
+        bridge.setBattle(battle);
         battle.fight(bridge);
         aggregateResults.addResult(new BattleResults(battle, gameData));
         // restore the game to its original state
@@ -137,6 +134,16 @@ class BattleCalculator implements IBattleCalculator {
     } finally {
       isRunning.set(false);
     }
+  }
+
+  private Collection<Unit> mergeUnitCollections(Collection<Unit> c1, Collection<Unit> c2) {
+    var combined = new HashSet<>(c1);
+    combined.addAll(c2);
+    Preconditions.checkState(
+        combined.size() == c1.size() + c2.size(),
+        "Attackers and defenders collections must be distinct with no duplicates. "
+            + "This helps catch logic errors in AI code that would otherwise be hard to debug.");
+    return combined;
   }
 
   public void cancel() {
