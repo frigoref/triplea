@@ -5,24 +5,34 @@
 # available to ansible.
 
 scriptDir="$(dirname "$0")"
-rootDir="$scriptDir/../../"
+rootDir="$scriptDir/../.."
+
+MIGRATIONS_ZIP="$rootDir/spitfire-server/database/build/artifacts/migrations.zip"
+LOBBY_SERVER_ZIP="$rootDir/spitfire-server/dropwizard-server/build/artifacts/triplea-dropwizard-server.zip"
+BOT_ZIP="$rootDir/game-app/game-headless/build/artifacts/triplea-game-headless.zip"
+
+
 function main() {
   buildArtifacts
+  copyBuildArtifacts
 }
 
 function buildArtifacts() {
   (
     cd "$rootDir" || exit 1
+
     ./gradlew \
         :spitfire-server:dropwizard-server:release \
         :game-app:game-headless:release \
         :spitfire-server:database:release
         set +x
   )
-  BUILD_VERSION=$("$rootDir/.build/get-build-version")
-  copyBuildArtifact "$rootDir/spitfire-server/database/build/artifacts/migrations.zip" "$scriptDir/../ansible/roles/lobby_server/files/"
-  copyBuildArtifact "$rootDir/spitfire-server/dropwizard-server/build/artifacts/triplea-dropwizard-server-$BUILD_VERSION.zip" "$scriptDir/../ansible/roles/lobby_server/files/"
-  copyBuildArtifact "$rootDir/game-app/game-headless/build/artifacts/triplea-game-headless-$BUILD_VERSION.zip" "$scriptDir/../ansible/roles/bot/files/"
+}
+
+function copyBuildArtifacts() {
+  copyBuildArtifact "$MIGRATIONS_ZIP" "$scriptDir/../ansible/roles/lobby_server/files/"
+  copyBuildArtifact "$LOBBY_SERVER_ZIP" "$scriptDir/../ansible/roles/lobby_server/files/"
+  copyBuildArtifact "$BOT_ZIP" "$scriptDir/../ansible/roles/bot/files/"
 }
 
 function copyBuildArtifact() {

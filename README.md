@@ -2,10 +2,12 @@
 TripleA is a free to play, volunteer run, 100% open source gaming community.
 
   - ***[Forums: Discussion, Questions & Help](https://forums.triplea-game.org/category/10/help-questions)***
+  - ***[How to Contribute](/docs/contribute.md)***
   - ***[Bug Tracker](https://github.com/triplea-game/triplea/issues/new)***
   - ***[Developer Setup Guide](/docs/development/README.md)***
 
 ![Game Board Screenshot](https://user-images.githubusercontent.com/12397753/36015523-a4e28a24-0d23-11e8-84c0-c4bd0ee19ce0.png)
+
 
 ## About TripleA
 
@@ -53,3 +55,8 @@ YourKit supports open source projects with innovative and intelligent tools for 
 YourKit is the creator of <a href="https://www.yourkit.com/java/profiler/">YourKit Java Profiler</a>, <a href="https://www.yourkit.com/.net/profiler/">YourKit .NET Profiler</a>, and <a href="https://www.yourkit.com/youmonitor/">YourKit YouMonitor</a>.
 
 YourKit grants the TripleA development project an open source license for YourKit Java Profiler.
+
+## Contributors
+<a href="https://github.com/triplea-game/triplea/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=triplea-game/triplea" />
+</a>

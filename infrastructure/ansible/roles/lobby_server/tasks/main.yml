@@ -32,6 +32,14 @@
     group: root
     mode: "0644"
 
+- name: Nginx config - deploy 2.5 lobby nginx config
+  template:
+    src: 2-5_lobby.conf
+    dest: /etc/nginx/sites-enabled/lobby-2-5.conf
+    owner: root
+    group: root
+    mode: "0644"
+
 - name: Nginx config - generate self signed cert
   when: nginx_generate_self_signed_cert
   include_role:
@@ -45,42 +53,51 @@
 
 - name: create lobby service user group
   group:
-    name: "{{ lobby_server_user }}"
+    name: "{{ lobby_user }}"
 
 - name: create service user
   user:
-    name: "{{ lobby_server_user }}"
-    group: "{{ lobby_server_user }}"
+    name: "{{ lobby_user }}"
+    group: "{{ lobby_user }}"
     create_home: no
     system: yes
 
 - name: ensure deployment folder exists
   file:
     state: directory
-    path: "{{ lobby_server_home_folder }}"
+    path: "{{ lobby_home_folder }}"
     mode: "0755"
-    owner: "{{ lobby_server_user }}"
-    group: "{{ lobby_server_user }}"
+    owner: "{{ lobby_user }}"
+    group: "{{ lobby_user }}"
 
 - name: extract lobby_server zip file
   register: deploy_artifact
   unarchive:
     src: "{{ lobby_artifact }}"
-    dest: "{{ lobby_server_home_folder }}/"
-    owner: "{{ lobby_server_user }}"
-    group: "{{ lobby_server_user }}"
+    dest: "{{ lobby_home_folder }}/"
+    owner: "{{ lobby_user }}"
+    group: "{{ lobby_user }}"
 
-- name: install systemd service script
+- name: install systemd service file
   register: service_script
   template:
     src: lobby_server.service.j2
     dest: /lib/systemd/system/{{ lobby_name }}.service
     mode: "644"
 
-- name: restart service if new artifact was deployed
-  when: (lobby_restart_on_new_deployment) and ((deploy_artifact.changed) or (service_script.changed))
+# Ideally we would restart the lobby if we update it to run the new version.
+# We do not want to disconnect users, so we do not restart the lobby.
+- name: ensure lobby is started
   systemd:
     name: "{{ lobby_name }}"
-    state: restarted
+    state: started
     enabled: yes
     daemon_reload: true
+
+- name: drop a version file in lobby home
+  template:
+    src: version.txt
+    dest: "{{ lobby_home_folder }}/version.txt"
+    mode: "0644"
+    owner: "{{ lobby_user }}"
+    group: "{{ lobby_user }}"

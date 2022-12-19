@@ -38,10 +38,11 @@ import javax.swing.SwingUtilities;
 import lombok.extern.slf4j.Slf4j;
 import org.triplea.config.product.ProductVersionReader;
 import org.triplea.debug.ErrorMessage;
+import org.triplea.domain.data.SystemIdLoader;
+import org.triplea.http.client.LobbyHttpClientConfig;
 import org.triplea.java.Interruptibles;
 import org.triplea.java.ThreadRunner;
 import org.triplea.map.description.file.MapDescriptionYamlGeneratorRunner;
-import org.triplea.map.game.notes.GameNotesMigrator;
 import org.triplea.swing.SwingAction;
 import org.triplea.util.ExitStatus;
 
@@ -98,6 +99,15 @@ public final class HeadedGameRunner {
     initializeClientSettingAndLogging();
     initializeLookAndFeel();
 
+    LobbyHttpClientConfig.setConfig(
+        LobbyHttpClientConfig.builder()
+            .clientVersion(
+                ProductVersionReader.getCurrentVersion().getMajor()
+                    + "."
+                    + ProductVersionReader.getCurrentVersion().getMinor())
+            .systemId(SystemIdLoader.load().getValue())
+            .build());
+
     initializeDesktopIntegrations(args);
     SwingUtilities.invokeLater(ErrorMessage::initialize);
 
@@ -115,13 +125,6 @@ public final class HeadedGameRunner {
                 BackgroundTaskRunner.runInBackground("Generating map descriptor files", unzipTask))
         .build()
         .generateYamlFiles();
-
-    GameNotesMigrator.builder()
-        .downloadedMapsFolder(ClientFileSystemHelper.getUserMapsFolder())
-        .progressIndicator(
-            unzipTask -> BackgroundTaskRunner.runInBackground("Migrating game notes..", unzipTask))
-        .build()
-        .extractGameNotes();
 
     log.info("Launching game, version: {} ", ProductVersionReader.getCurrentVersion());
     start();

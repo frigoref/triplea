@@ -181,7 +181,7 @@ public class PoliticsDelegate extends BaseTripleADelegate implements IPoliticsDe
     final String acceptanceQuestion =
         bridge
             .getResourceLoader()
-            .map(PoliticsText::getInstance)
+            .map(PoliticsText::new)
             .map(politicsText -> politicsText.getAcceptanceQuestion(paa.getText()))
             // String is ignored if getResourceLoader() returns empty Optional.
             .orElse("");
@@ -314,11 +314,9 @@ public class PoliticsDelegate extends BaseTripleADelegate implements IPoliticsDe
         .getResourceLoader()
         .ifPresent(
             resourceLoader -> {
-              sendNotification(
-                  PoliticsText.getInstance(resourceLoader).getNotificationFailure(paa.getText()));
-              notifyOtherPlayers(
-                  PoliticsText.getInstance(resourceLoader)
-                      .getNotificationFailureOthers(paa.getText()));
+              PoliticsText politicsText = new PoliticsText(resourceLoader);
+              sendNotification(politicsText.getNotificationFailure(paa.getText()));
+              notifyOtherPlayers(politicsText.getNotificationFailureOthers(paa.getText()));
             });
   }
 
@@ -335,11 +333,9 @@ public class PoliticsDelegate extends BaseTripleADelegate implements IPoliticsDe
         .getResourceLoader()
         .ifPresent(
             resourceLoader -> {
-              sendNotification(
-                  PoliticsText.getInstance(resourceLoader).getNotificationSuccess(paa.getText()));
-              notifyOtherPlayers(
-                  PoliticsText.getInstance(resourceLoader)
-                      .getNotificationSuccessOthers(paa.getText()));
+              PoliticsText politicsText = new PoliticsText(resourceLoader);
+              sendNotification(politicsText.getNotificationSuccess(paa.getText()));
+              notifyOtherPlayers(politicsText.getNotificationSuccessOthers(paa.getText()));
             });
   }
 
