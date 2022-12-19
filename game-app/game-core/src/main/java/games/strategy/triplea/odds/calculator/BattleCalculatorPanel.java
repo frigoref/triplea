@@ -18,6 +18,7 @@ import games.strategy.triplea.delegate.power.calculator.CombatValueBuilder;
 import games.strategy.triplea.delegate.power.calculator.PowerStrengthAndRolls;
 import games.strategy.triplea.settings.ClientSetting;
 import games.strategy.triplea.ui.UiContext;
+import games.strategy.triplea.util.TuvCostsCalculator;
 import games.strategy.triplea.util.TuvUtils;
 import games.strategy.ui.Util;
 import java.awt.BorderLayout;
@@ -30,6 +31,8 @@ import java.awt.Insets;
 import java.awt.Window;
 import java.awt.event.WindowEvent;
 import java.text.DecimalFormat;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
@@ -101,17 +104,17 @@ class BattleCalculatorPanel extends JPanel {
   private String defenderOrderOfLosses = null;
   private final Territory location;
   private final JList<String> territoryEffectsJList;
+  private final TuvCostsCalculator tuvCalculator = new TuvCostsCalculator();
 
   BattleCalculatorPanel(final GameData data, final UiContext uiContext, final Territory location) {
     this.data = data;
     this.uiContext = uiContext;
     this.location = location;
     calculateButton.setEnabled(false);
-    data.acquireReadLock();
-    try {
+    try (GameData.Unlocker ignored = data.acquireReadLock()) {
       final Collection<GamePlayer> playerList = new ArrayList<>(data.getPlayerList().getPlayers());
-      if (doesPlayerHaveUnitsOnMap(GamePlayer.NULL_PLAYERID, data)) {
-        playerList.add(GamePlayer.NULL_PLAYERID);
+      if (doesPlayerHaveUnitsOnMap(data.getPlayerList().getNullPlayer(), data)) {
+        playerList.add(data.getPlayerList().getNullPlayer());
       }
       attackerCombo = new JComboBox<>(SwingComponents.newComboBoxModel(playerList));
       defenderCombo = new JComboBox<>(SwingComponents.newComboBoxModel(playerList));
@@ -141,8 +144,6 @@ class BattleCalculatorPanel extends JPanel {
           }
         }
       }
-    } finally {
-      data.releaseReadLock();
     }
     defenderCombo.setRenderer(new PlayerRenderer());
     attackerCombo.setRenderer(new PlayerRenderer());
@@ -1052,17 +1053,24 @@ class BattleCalculatorPanel extends JPanel {
     }
     setupAttackerAndDefender();
 
-    calculator =
-        new ConcurrentBattleCalculator(
-            () ->
+    final Instant start = Instant.now();
+    calculator = new ConcurrentBattleCalculator();
+
+    calculator
+        .setGameData(data)
+        .thenAccept(
+            bool -> {
+              if (bool) {
+                long millis = Duration.between(start, Instant.now()).toMillis();
                 SwingUtilities.invokeLater(
                     () -> {
+                      log.debug("Battle Calculator ready in {}ms", millis);
                       calculateButton.setText("Calculate Odds");
                       calculateButton.setEnabled(true);
                       calculateButton.requestFocusInWindow();
-                    }));
-
-    calculator.setGameData(data);
+                    });
+              }
+            });
     setWidgetActivation();
     revalidate();
   }
@@ -1071,7 +1079,7 @@ class BattleCalculatorPanel extends JPanel {
     final AttackerAndDefenderSelector.AttackerAndDefender attAndDef =
         AttackerAndDefenderSelector.builder()
             .players(data.getPlayerList().getPlayers())
-            .currentPlayer(data.getSequence().getStep().getPlayerId())
+            .currentPlayer(data.getHistory().getCurrentPlayer())
             .relationshipTracker(data.getRelationshipTracker())
             .territory(location)
             .build()
@@ -1107,8 +1115,7 @@ class BattleCalculatorPanel extends JPanel {
     final Collection<TerritoryEffect> territoryEffects = new ArrayList<>();
     if (territoryEffectsJList != null) {
       final List<String> selected = territoryEffectsJList.getSelectedValuesList();
-      data.acquireReadLock();
-      try {
+      try (GameData.Unlocker ignored = data.acquireReadLock()) {
         final Map<String, TerritoryEffect> allTerritoryEffects = data.getTerritoryEffectList();
         for (final String selection : selected) {
           if (selection.equals(NO_EFFECTS)) {
@@ -1117,8 +1124,6 @@ class BattleCalculatorPanel extends JPanel {
           }
           territoryEffects.add(allTerritoryEffects.get(selection));
         }
-      } finally {
-        data.releaseReadLock();
       }
     }
     return territoryEffects;
@@ -1222,8 +1227,7 @@ class BattleCalculatorPanel extends JPanel {
               ? "N/A"
               : formatValue(avgAttIfAttWon) + " / " + attackersTotal);
       roundsAverage.setText("" + formatValue(results.get().getAverageBattleRoundsFought()));
-      try {
-        data.acquireReadLock();
+      try (GameData.Unlocker ignored = data.acquireReadLock()) {
         averageChangeInTuv.setText(
             ""
                 + formatValue(
@@ -1235,8 +1239,6 @@ class BattleCalculatorPanel extends JPanel {
                             getDefender(),
                             mainCombatDefenders,
                             data)));
-      } finally {
-        data.releaseReadLock();
       }
       count.setText(results.get().getRollCount() + "");
       time.setText(formatValue(results.get().getTime() / 1000.0) + " s");
@@ -1330,8 +1332,7 @@ class BattleCalculatorPanel extends JPanel {
     keepOneAttackingLandUnitCheckBox.setEnabled(landBattleCheckBox.isSelected());
     amphibiousCheckBox.setEnabled(landBattleCheckBox.isSelected());
     final boolean isLand = isLand();
-    try {
-      data.acquireReadLock();
+    try (GameData.Unlocker ignored = data.acquireReadLock()) {
       final List<Unit> attackers =
           CollectionUtils.getMatches(
               attackingUnitsPanel.getUnits(), Matches.unitCanBeInBattle(true, isLand, 1, true));
@@ -1343,11 +1344,11 @@ class BattleCalculatorPanel extends JPanel {
       attackerUnitsTotalTuv.setText(
           "TUV: "
               + TuvUtils.getTuv(
-                  attackers, getAttacker(), TuvUtils.getCostsForTuv(getAttacker(), data), data));
+                  attackers, getAttacker(), tuvCalculator.getCostsForTuv(getAttacker()), data));
       defenderUnitsTotalTuv.setText(
           "TUV: "
               + TuvUtils.getTuv(
-                  defenders, getDefender(), TuvUtils.getCostsForTuv(getDefender(), data), data));
+                  defenders, getDefender(), tuvCalculator.getCostsForTuv(getDefender()), data));
       final int attackHitPoints = CasualtyUtil.getTotalHitpointsLeft(attackers);
       final int defenseHitPoints = CasualtyUtil.getTotalHitpointsLeft(defenders);
       attackerUnitsTotalHitpoints.setText("HP: " + attackHitPoints);
@@ -1400,8 +1401,6 @@ class BattleCalculatorPanel extends JPanel {
               .calculateTotalPower();
       attackerUnitsTotalPower.setText("Power: " + attackPower);
       defenderUnitsTotalPower.setText("Power: " + defensePower);
-    } finally {
-      data.releaseReadLock();
     }
   }
 
@@ -1429,13 +1428,10 @@ class BattleCalculatorPanel extends JPanel {
   }
 
   static boolean hasMaxRounds(final boolean isLand, final GameData data) {
-    data.acquireReadLock();
-    try {
+    try (GameData.Unlocker ignored = data.acquireReadLock()) {
       return isLand
           ? Properties.getLandBattleRounds(data.getProperties()) > 0
           : Properties.getSeaBattleRounds(data.getProperties()) > 0;
-    } finally {
-      data.releaseReadLock();
     }
   }
 }

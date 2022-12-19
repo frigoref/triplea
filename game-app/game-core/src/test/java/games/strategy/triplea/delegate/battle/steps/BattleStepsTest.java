@@ -41,6 +41,7 @@ import games.strategy.triplea.attachments.TechAttachment;
 import games.strategy.triplea.attachments.UnitAttachment;
 import games.strategy.triplea.delegate.battle.BattleActions;
 import games.strategy.triplea.delegate.battle.BattleState;
+import games.strategy.triplea.delegate.battle.FakeBattleState;
 import java.util.Collection;
 import java.util.List;
 import java.util.Set;
@@ -105,6 +106,20 @@ public class BattleStepsTest {
   public static Unit givenUnitFirstStrike() {
     final UnitAndAttachment unitAndAttachment = newUnitAndAttachment();
     lenient().when(unitAndAttachment.unitAttachment.getIsFirstStrike()).thenReturn(true);
+    return unitAndAttachment.unit;
+  }
+
+  public static Unit givenUnitFirstStrikeSuicideOnAttack() {
+    final UnitAndAttachment unitAndAttachment = newUnitAndAttachment();
+    lenient().when(unitAndAttachment.unitAttachment.getIsFirstStrike()).thenReturn(true);
+    lenient().when(unitAndAttachment.unitAttachment.getIsSuicideOnAttack()).thenReturn(true);
+    return unitAndAttachment.unit;
+  }
+
+  public static Unit givenUnitFirstStrikeSuicideOnDefense() {
+    final UnitAndAttachment unitAndAttachment = newUnitAndAttachment();
+    lenient().when(unitAndAttachment.unitAttachment.getIsFirstStrike()).thenReturn(true);
+    lenient().when(unitAndAttachment.unitAttachment.getIsSuicideOnDefense()).thenReturn(true);
     return unitAndAttachment.unit;
   }
 
@@ -266,7 +281,8 @@ public class BattleStepsTest {
         hitPlayer.getName() + NOTIFY_PREFIX + name + CASUALTIES_SUFFIX);
   }
 
-  private List<String> givenBattleSteps(final BattleState battleState) {
+  private List<String> givenBattleSteps(final FakeBattleState battleState) {
+    battleState.init();
     return BattleSteps.builder()
         .battleActions(battleActions)
         .battleState(battleState)
@@ -320,6 +336,8 @@ public class BattleStepsTest {
   void bombardOnFirstRun() {
     final Unit unit1 = givenAnyUnit();
     final Unit unit2 = givenAnyUnit();
+    final TechAttachment techAttachment = mock(TechAttachment.class);
+    when(attacker.getTechAttachment()).thenReturn(techAttachment);
     final List<String> steps =
         givenBattleSteps(
             givenBattleStateBuilder()
@@ -412,7 +430,6 @@ public class BattleStepsTest {
 
     when(unit1.getOwner()).thenReturn(attacker);
     when(unit3.getOwner()).thenReturn(attacker);
-    when(attacker.getAttachment(Constants.TECH_ATTACHMENT_NAME)).thenReturn(techAttachment);
     when(attacker.getTechAttachment()).thenReturn(techAttachment);
     when(techAttachment.getParatroopers()).thenReturn(true);
     when(battleSite.getUnits()).thenReturn(List.of(unit1, unit3));
@@ -439,7 +456,7 @@ public class BattleStepsTest {
     final Unit unit1 = givenAnyUnit();
     final Unit unit2 = givenAnyUnit();
     final Unit unit3 = givenAnyUnit();
-    when(attacker.getAttachment(Constants.TECH_ATTACHMENT_NAME)).thenReturn(techAttachment);
+    when(attacker.getTechAttachment()).thenReturn(techAttachment);
     when(techAttachment.getParatroopers()).thenReturn(false);
     final List<String> steps =
         givenBattleSteps(
@@ -498,7 +515,6 @@ public class BattleStepsTest {
 
     when(unit1.getOwner()).thenReturn(attacker);
     when(unit3.getOwner()).thenReturn(attacker);
-    when(attacker.getAttachment(Constants.TECH_ATTACHMENT_NAME)).thenReturn(techAttachment);
     when(attacker.getTechAttachment()).thenReturn(techAttachment);
     when(techAttachment.getParatroopers()).thenReturn(true);
     when(battleSite.getUnits()).thenReturn(List.of(unit1, unit3));

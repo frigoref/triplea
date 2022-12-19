@@ -1,6 +1,5 @@
 package games.strategy.triplea.attachments;
 
-import com.google.common.collect.ImmutableMap;
 import games.strategy.engine.data.Attachable;
 import games.strategy.engine.data.DefaultAttachment;
 import games.strategy.engine.data.GameData;
@@ -9,7 +8,6 @@ import games.strategy.engine.data.MutableProperty;
 import games.strategy.engine.data.RelationshipType;
 import games.strategy.engine.data.gameparser.GameParseException;
 import games.strategy.triplea.Constants;
-import java.util.Map;
 
 /** An attachment for instances of {@link RelationshipType}. */
 public class RelationshipTypeAttachment extends DefaultAttachment {
@@ -74,7 +72,7 @@ public class RelationshipTypeAttachment extends DefaultAttachment {
       case ARCHETYPE_WAR:
       case ARCHETYPE_ALLIED:
       case ARCHETYPE_NEUTRAL:
-        this.archeType = lowerArcheType;
+        this.archeType = lowerArcheType.intern();
         break;
       default:
         throw new GameParseException(
@@ -109,7 +107,7 @@ public class RelationshipTypeAttachment extends DefaultAttachment {
    * @param canFlyOver should be "true", "false" or "default"
    */
   private void setCanMoveAirUnitsOverOwnedLand(final String canFlyOver) {
-    canMoveAirUnitsOverOwnedLand = canFlyOver;
+    canMoveAirUnitsOverOwnedLand = canFlyOver.intern();
   }
 
   private String getCanMoveAirUnitsOverOwnedLand() {
@@ -135,7 +133,7 @@ public class RelationshipTypeAttachment extends DefaultAttachment {
   }
 
   private void setCanMoveLandUnitsOverOwnedLand(final String canFlyOver) {
-    canMoveLandUnitsOverOwnedLand = canFlyOver;
+    canMoveLandUnitsOverOwnedLand = canFlyOver.intern();
   }
 
   private String getCanMoveLandUnitsOverOwnedLand() {
@@ -154,7 +152,7 @@ public class RelationshipTypeAttachment extends DefaultAttachment {
   }
 
   private void setCanLandAirUnitsOnOwnedLand(final String canLandAir) {
-    canLandAirUnitsOnOwnedLand = canLandAir;
+    canLandAirUnitsOnOwnedLand = canLandAir.intern();
   }
 
   private String getCanLandAirUnitsOnOwnedLand() {
@@ -174,7 +172,7 @@ public class RelationshipTypeAttachment extends DefaultAttachment {
   }
 
   private void setCanTakeOverOwnedTerritory(final String canTakeOver) {
-    canTakeOverOwnedTerritory = canTakeOver;
+    canTakeOverOwnedTerritory = canTakeOver.intern();
   }
 
   private String getCanTakeOverOwnedTerritory() {
@@ -222,7 +220,7 @@ public class RelationshipTypeAttachment extends DefaultAttachment {
                     + thisErrorMsg());
         }
       }
-      upkeepCost = integerCost;
+      upkeepCost = integerCost.intern();
     }
   }
 
@@ -250,7 +248,7 @@ public class RelationshipTypeAttachment extends DefaultAttachment {
               + PROPERTY_TRUE
               + thisErrorMsg());
     }
-    alliancesCanChainTogether = value;
+    alliancesCanChainTogether = value.intern();
   }
 
   private String getAlliancesCanChainTogether() {
@@ -281,7 +279,7 @@ public class RelationshipTypeAttachment extends DefaultAttachment {
               + PROPERTY_TRUE
               + thisErrorMsg());
     }
-    isDefaultWarPosition = value;
+    isDefaultWarPosition = value.intern();
   }
 
   private String getIsDefaultWarPosition() {
@@ -312,7 +310,7 @@ public class RelationshipTypeAttachment extends DefaultAttachment {
               + PROPERTY_TRUE
               + thisErrorMsg());
     }
-    givesBackOriginalTerritories = value;
+    givesBackOriginalTerritories = value.intern();
   }
 
   private String getGivesBackOriginalTerritories() {
@@ -341,7 +339,7 @@ public class RelationshipTypeAttachment extends DefaultAttachment {
               + PROPERTY_TRUE
               + thisErrorMsg());
     }
-    canMoveIntoDuringCombatMove = value;
+    canMoveIntoDuringCombatMove = value.intern();
   }
 
   private String getCanMoveIntoDuringCombatMove() {
@@ -371,7 +369,7 @@ public class RelationshipTypeAttachment extends DefaultAttachment {
               + PROPERTY_TRUE
               + thisErrorMsg());
     }
-    canMoveThroughCanals = value;
+    canMoveThroughCanals = value.intern();
   }
 
   private String getCanMoveThroughCanals() {
@@ -403,7 +401,7 @@ public class RelationshipTypeAttachment extends DefaultAttachment {
               + PROPERTY_TRUE
               + thisErrorMsg());
     }
-    rocketsCanFlyOver = value;
+    rocketsCanFlyOver = value.intern();
   }
 
   private String getRocketsCanFlyOver() {
@@ -438,75 +436,64 @@ public class RelationshipTypeAttachment extends DefaultAttachment {
   public void validate(final GameState data) {}
 
   @Override
-  public Map<String, MutableProperty<?>> getPropertyMap() {
-    return ImmutableMap.<String, MutableProperty<?>>builder()
-        .put(
-            "archeType",
-            MutableProperty.ofString(this::setArcheType, this::getArcheType, this::resetArcheType))
-        .put(
-            "canMoveLandUnitsOverOwnedLand",
-            MutableProperty.ofString(
-                this::setCanMoveLandUnitsOverOwnedLand,
-                this::getCanMoveLandUnitsOverOwnedLand,
-                this::resetCanMoveLandUnitsOverOwnedLand))
-        .put(
-            "canMoveAirUnitsOverOwnedLand",
-            MutableProperty.ofString(
-                this::setCanMoveAirUnitsOverOwnedLand,
-                this::getCanMoveAirUnitsOverOwnedLand,
-                this::resetCanMoveAirUnitsOverOwnedLand))
-        .put(
-            "alliancesCanChainTogether",
-            MutableProperty.ofString(
-                this::setAlliancesCanChainTogether,
-                this::getAlliancesCanChainTogether,
-                this::resetAlliancesCanChainTogether))
-        .put(
-            "isDefaultWarPosition",
-            MutableProperty.ofString(
-                this::setIsDefaultWarPosition,
-                this::getIsDefaultWarPosition,
-                this::resetIsDefaultWarPosition))
-        .put(
-            "upkeepCost",
-            MutableProperty.ofString(
-                this::setUpkeepCost, this::getUpkeepCost, this::resetUpkeepCost))
-        .put(
-            "canLandAirUnitsOnOwnedLand",
-            MutableProperty.ofString(
-                this::setCanLandAirUnitsOnOwnedLand,
-                this::getCanLandAirUnitsOnOwnedLand,
-                this::resetCanLandAirUnitsOnOwnedLand))
-        .put(
-            "canTakeOverOwnedTerritory",
-            MutableProperty.ofString(
-                this::setCanTakeOverOwnedTerritory,
-                this::getCanTakeOverOwnedTerritory,
-                this::resetCanTakeOverOwnedTerritory))
-        .put(
-            "givesBackOriginalTerritories",
-            MutableProperty.ofString(
-                this::setGivesBackOriginalTerritories,
-                this::getGivesBackOriginalTerritories,
-                this::resetGivesBackOriginalTerritories))
-        .put(
-            "canMoveIntoDuringCombatMove",
-            MutableProperty.ofString(
-                this::setCanMoveIntoDuringCombatMove,
-                this::getCanMoveIntoDuringCombatMove,
-                this::resetCanMoveIntoDuringCombatMove))
-        .put(
-            "canMoveThroughCanals",
-            MutableProperty.ofString(
-                this::setCanMoveThroughCanals,
-                this::getCanMoveThroughCanals,
-                this::resetCanMoveThroughCanals))
-        .put(
-            "rocketsCanFlyOver",
-            MutableProperty.ofString(
-                this::setRocketsCanFlyOver,
-                this::getRocketsCanFlyOver,
-                this::resetRocketsCanFlyOver))
-        .build();
+  public MutableProperty<?> getPropertyOrNull(String propertyName) {
+    switch (propertyName) {
+      case "archeType":
+        return MutableProperty.ofString(
+            this::setArcheType, this::getArcheType, this::resetArcheType);
+      case "canMoveLandUnitsOverOwnedLand":
+        return MutableProperty.ofString(
+            this::setCanMoveLandUnitsOverOwnedLand,
+            this::getCanMoveLandUnitsOverOwnedLand,
+            this::resetCanMoveLandUnitsOverOwnedLand);
+      case "canMoveAirUnitsOverOwnedLand":
+        return MutableProperty.ofString(
+            this::setCanMoveAirUnitsOverOwnedLand,
+            this::getCanMoveAirUnitsOverOwnedLand,
+            this::resetCanMoveAirUnitsOverOwnedLand);
+      case "alliancesCanChainTogether":
+        return MutableProperty.ofString(
+            this::setAlliancesCanChainTogether,
+            this::getAlliancesCanChainTogether,
+            this::resetAlliancesCanChainTogether);
+      case "isDefaultWarPosition":
+        return MutableProperty.ofString(
+            this::setIsDefaultWarPosition,
+            this::getIsDefaultWarPosition,
+            this::resetIsDefaultWarPosition);
+      case "upkeepCost":
+        return MutableProperty.ofString(
+            this::setUpkeepCost, this::getUpkeepCost, this::resetUpkeepCost);
+      case "canLandAirUnitsOnOwnedLand":
+        return MutableProperty.ofString(
+            this::setCanLandAirUnitsOnOwnedLand,
+            this::getCanLandAirUnitsOnOwnedLand,
+            this::resetCanLandAirUnitsOnOwnedLand);
+      case "canTakeOverOwnedTerritory":
+        return MutableProperty.ofString(
+            this::setCanTakeOverOwnedTerritory,
+            this::getCanTakeOverOwnedTerritory,
+            this::resetCanTakeOverOwnedTerritory);
+      case "givesBackOriginalTerritories":
+        return MutableProperty.ofString(
+            this::setGivesBackOriginalTerritories,
+            this::getGivesBackOriginalTerritories,
+            this::resetGivesBackOriginalTerritories);
+      case "canMoveIntoDuringCombatMove":
+        return MutableProperty.ofString(
+            this::setCanMoveIntoDuringCombatMove,
+            this::getCanMoveIntoDuringCombatMove,
+            this::resetCanMoveIntoDuringCombatMove);
+      case "canMoveThroughCanals":
+        return MutableProperty.ofString(
+            this::setCanMoveThroughCanals,
+            this::getCanMoveThroughCanals,
+            this::resetCanMoveThroughCanals);
+      case "rocketsCanFlyOver":
+        return MutableProperty.ofString(
+            this::setRocketsCanFlyOver, this::getRocketsCanFlyOver, this::resetRocketsCanFlyOver);
+      default:
+        return null;
+    }
   }
 }

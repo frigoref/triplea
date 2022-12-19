@@ -10,9 +10,9 @@ import games.strategy.engine.data.GamePlayer;
 import games.strategy.engine.data.Territory;
 import games.strategy.engine.data.TerritoryEffect;
 import games.strategy.engine.data.Unit;
-import games.strategy.triplea.delegate.BaseEditDelegate;
 import games.strategy.triplea.delegate.DiceRoll;
 import games.strategy.triplea.delegate.Die;
+import games.strategy.triplea.delegate.EditDelegate;
 import games.strategy.triplea.delegate.Matches;
 import games.strategy.triplea.delegate.TerritoryEffectHelper;
 import games.strategy.triplea.delegate.battle.BattleState;
@@ -222,11 +222,9 @@ public class BattleDisplay extends JPanel {
       }
     }
     final Map<Unit, Collection<Unit>> dependentsMap;
-    gameData.acquireReadLock();
-    try {
+
+    try (GameData.Unlocker ignored = gameData.acquireReadLock()) {
       dependentsMap = CasualtyUtil.getDependents(killedUnits);
-    } finally {
-      gameData.releaseReadLock();
     }
     final Collection<Unit> dependentUnitsReturned = new ArrayList<>();
     for (final Collection<Unit> dependentCollection : dependentsMap.values()) {
@@ -479,7 +477,7 @@ public class BattleDisplay extends JPanel {
 
     SwingUtilities.invokeLater(
         () -> {
-          final boolean isEditMode = BaseEditDelegate.getEditMode(gameData.getProperties());
+          final boolean isEditMode = EditDelegate.getEditMode(gameData.getProperties());
           if (!isEditMode) {
             dicePanel.setDiceRoll(dice);
             casualties.setVisible(false);
@@ -779,7 +777,7 @@ public class BattleDisplay extends JPanel {
         final Iterable<UnitCategory> categoryIter, final boolean damaged, final boolean disabled) {
       for (final UnitCategory category : categoryIter) {
         final JPanel panel = new JPanel();
-        final Optional<ImageIcon> unitImage =
+        final ImageIcon unitImage =
             uiContext
                 .getUnitImageFactory()
                 .getIcon(
@@ -789,12 +787,13 @@ public class BattleDisplay extends JPanel {
                         .damaged(damaged && category.hasDamageOrBombingUnitDamage())
                         .disabled(disabled && category.getDisabled())
                         .build());
-        final JLabel unit = unitImage.map(JLabel::new).orElseGet(JLabel::new);
+        final JLabel unit = new JLabel(unitImage);
         panel.add(unit);
         // Add a tooltip, with a count of 1 so that the tooltip doesn't have a number label (so it
         // won't get out of date
         // when units are killed.)
-        MapUnitTooltipManager.setUnitTooltip(unit, category.getType(), category.getOwner(), 1);
+        MapUnitTooltipManager.setUnitTooltip(
+            unit, category.getType(), category.getOwner(), 1, uiContext);
         for (final UnitOwner owner : category.getDependents()) {
           unit.add(uiContext.newUnitImageLabel(owner.getType(), owner.getOwner()));
         }

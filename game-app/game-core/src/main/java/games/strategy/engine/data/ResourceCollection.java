@@ -50,7 +50,7 @@ public class ResourceCollection extends GameDataComponent {
     final int current = getQuantity(resource);
     if ((current - quantity) < 0) {
       throw new IllegalArgumentException(
-          "Cant remove more than player has of resource: "
+          "Can't remove more than player has of resource: "
               + resource.getName()
               + ". current:"
               + current
@@ -58,10 +58,6 @@ public class ResourceCollection extends GameDataComponent {
               + quantity);
     }
     change(resource, -quantity);
-  }
-
-  public void removeAllOfResource(final Resource resource) {
-    resources.removeKey(resource);
   }
 
   private void change(final Resource resource, final int quantity) {
@@ -85,15 +81,12 @@ public class ResourceCollection extends GameDataComponent {
   }
 
   public int getQuantity(final String name) {
-    getData().acquireReadLock();
-    try {
+    try (GameData.Unlocker ignored = getData().acquireReadLock()) {
       final Resource resource = getData().getResourceList().getResource(name);
       if (resource == null) {
         throw new IllegalArgumentException("No resource named:" + name);
       }
       return getQuantity(resource);
-    } finally {
-      getData().releaseReadLock();
     }
   }
 
@@ -176,8 +169,7 @@ public class ResourceCollection extends GameDataComponent {
     }
     final StringBuilder sb = new StringBuilder();
     Resource pus = null;
-    data.acquireReadLock();
-    try {
+    try (GameData.Unlocker ignored = data.acquireReadLock()) {
       pus = data.getResourceList().getResource(Constants.PUS);
     } catch (final NullPointerException e) {
       // we are getting null pointers here occasionally on deserializing game saves, because
@@ -189,8 +181,6 @@ public class ResourceCollection extends GameDataComponent {
           break;
         }
       }
-    } finally {
-      data.releaseReadLock();
     }
     if (pus == null) {
       throw new IllegalStateException("Possible deserialization error: PUs is null");

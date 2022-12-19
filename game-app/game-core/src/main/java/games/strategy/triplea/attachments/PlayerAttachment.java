@@ -1,6 +1,5 @@
 package games.strategy.triplea.attachments;
 
-import com.google.common.collect.ImmutableMap;
 import games.strategy.engine.data.Attachable;
 import games.strategy.engine.data.DefaultAttachment;
 import games.strategy.engine.data.GameData;
@@ -17,16 +16,17 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import java.util.function.Predicate;
+import javax.annotation.Nullable;
 import org.triplea.java.collections.CollectionUtils;
 import org.triplea.java.collections.IntegerMap;
 import org.triplea.util.Triple;
 
 /**
  * An attachment for instances of {@link GamePlayer} that defines properties unrelated to rules (see
- * the class description of {@link AbstractPlayerRulesAttachment}).
+ * the class description of {@link AbstractPlayerRulesAttachment}). Note: Empty collection fields
+ * default to null to minimize memory use and serialization size.
  */
 public class PlayerAttachment extends DefaultAttachment {
   private static final long serialVersionUID = 1880755875866426270L;
@@ -38,30 +38,30 @@ public class PlayerAttachment extends DefaultAttachment {
   private int retainCapitalNumber = 1;
   // number of capitals needed before we lose ability to gain money and produce units
   private int retainCapitalProduceNumber = 1;
-  private List<GamePlayer> giveUnitControl = new ArrayList<>();
+  private @Nullable List<GamePlayer> giveUnitControl = null;
   private boolean giveUnitControlInAllTerritories = false;
-  private List<GamePlayer> captureUnitOnEnteringBy = new ArrayList<>();
+  private @Nullable List<GamePlayer> captureUnitOnEnteringBy = null;
   // gives any technology researched to this player automatically
-  private List<GamePlayer> shareTechnology = new ArrayList<>();
+  private @Nullable List<GamePlayer> shareTechnology = null;
   // allows these players to help pay for technology
-  private List<GamePlayer> helpPayTechCost = new ArrayList<>();
+  private @Nullable List<GamePlayer> helpPayTechCost = null;
   // do we lose our money and have it disappear or is that money captured?
   private boolean destroysPus = false;
   // are we immune to being blockaded?
   private boolean immuneToBlockade = false;
   // what resources can be used for suicide attacks, and at what attack power
-  private IntegerMap<Resource> suicideAttackResources = new IntegerMap<>();
+  private @Nullable IntegerMap<Resource> suicideAttackResources = null;
   // what can be hit by suicide attacks
-  private Set<UnitType> suicideAttackTargets = null;
+  private @Nullable Set<UnitType> suicideAttackTargets = null;
 
   // placement limits on a flexible per player basis
-  private Set<Triple<Integer, String, Set<UnitType>>> placementLimit = new HashSet<>();
+  private @Nullable Set<Triple<Integer, String, Set<UnitType>>> placementLimit = null;
 
   // movement limits on a flexible per player basis
-  private Set<Triple<Integer, String, Set<UnitType>>> movementLimit = new HashSet<>();
+  private @Nullable Set<Triple<Integer, String, Set<UnitType>>> movementLimit = null;
 
   // attacking limits on a flexible per player basis
-  private Set<Triple<Integer, String, Set<UnitType>>> attackingLimit = new HashSet<>();
+  private @Nullable Set<Triple<Integer, String, Set<UnitType>>> attackingLimit = null;
 
   public PlayerAttachment(final String name, final Attachable attachable, final GameData gameData) {
     super(name, attachable, gameData);
@@ -83,6 +83,9 @@ public class PlayerAttachment extends DefaultAttachment {
   }
 
   private void setPlacementLimit(final String value) throws GameParseException {
+    if (placementLimit == null) {
+      placementLimit = new HashSet<>();
+    }
     placementLimit.add(parseUnitLimit("placementLimit", value));
   }
 
@@ -91,14 +94,17 @@ public class PlayerAttachment extends DefaultAttachment {
   }
 
   private Set<Triple<Integer, String, Set<UnitType>>> getPlacementLimit() {
-    return placementLimit;
+    return getSetProperty(placementLimit);
   }
 
   private void resetPlacementLimit() {
-    placementLimit = new HashSet<>();
+    placementLimit = null;
   }
 
   private void setMovementLimit(final String value) throws GameParseException {
+    if (movementLimit == null) {
+      movementLimit = new HashSet<>();
+    }
     movementLimit.add(parseUnitLimit("movementLimit", value));
   }
 
@@ -107,14 +113,17 @@ public class PlayerAttachment extends DefaultAttachment {
   }
 
   private Set<Triple<Integer, String, Set<UnitType>>> getMovementLimit() {
-    return movementLimit;
+    return getSetProperty(movementLimit);
   }
 
   private void resetMovementLimit() {
-    movementLimit = new HashSet<>();
+    movementLimit = null;
   }
 
   private void setAttackingLimit(final String value) throws GameParseException {
+    if (attackingLimit == null) {
+      attackingLimit = new HashSet<>();
+    }
     attackingLimit.add(parseUnitLimit("attackingLimit", value));
   }
 
@@ -123,11 +132,11 @@ public class PlayerAttachment extends DefaultAttachment {
   }
 
   private Set<Triple<Integer, String, Set<UnitType>>> getAttackingLimit() {
-    return attackingLimit;
+    return getSetProperty(attackingLimit);
   }
 
   private void resetAttackingLimit() {
-    attackingLimit = new HashSet<>();
+    attackingLimit = null;
   }
 
   private Triple<Integer, String, Set<UnitType>> parseUnitLimit(
@@ -150,14 +159,10 @@ public class PlayerAttachment extends DefaultAttachment {
       types.addAll(getData().getUnitTypeList().getAllUnitTypes());
     } else {
       for (int i = 2; i < s.length; i++) {
-        final UnitType ut = getData().getUnitTypeList().getUnitType(s[i]);
-        if (ut == null) {
-          throw new GameParseException("No unit called: " + s[i] + thisErrorMsg());
-        }
-        types.add(ut);
+        types.add(getUnitTypeOrThrow(s[i]));
       }
     }
-    return Triple.of(max, s[1], types);
+    return Triple.of(max, s[1].intern(), types);
   }
 
   /**
@@ -192,8 +197,7 @@ public class PlayerAttachment extends DefaultAttachment {
       return true;
     }
     final Predicate<Unit> notOwned = Matches.unitIsOwnedBy(owner).negate();
-    final Predicate<Unit> notAllied =
-        Matches.alliedUnit(owner, data.getRelationshipTracker()).negate();
+    final Predicate<Unit> notAllied = Matches.alliedUnit(owner).negate();
     for (final Triple<Integer, String, Set<UnitType>> currentLimit : stackingLimits) {
       // first make a copy of unitsMoving
       final Collection<Unit> copyUnitsMoving = new ArrayList<>(unitsMoving);
@@ -221,22 +225,7 @@ public class PlayerAttachment extends DefaultAttachment {
   }
 
   private void setSuicideAttackTargets(final String value) throws GameParseException {
-    if (value == null) {
-      suicideAttackTargets = null;
-      return;
-    }
-    if (suicideAttackTargets == null) {
-      suicideAttackTargets = new HashSet<>();
-    }
-    final String[] s = splitOnColon(value);
-    for (final String u : s) {
-      final UnitType ut = getData().getUnitTypeList().getUnitType(u);
-      if (ut == null) {
-        throw new GameParseException(
-            "suicideAttackTargets: no such unit called " + u + thisErrorMsg());
-      }
-      suicideAttackTargets.add(ut);
-    }
+    suicideAttackTargets = parseUnitTypes("suicideAttackTargets", value, suicideAttackTargets);
   }
 
   private void setSuicideAttackTargets(final Set<UnitType> value) {
@@ -244,7 +233,7 @@ public class PlayerAttachment extends DefaultAttachment {
   }
 
   public Set<UnitType> getSuicideAttackTargets() {
-    return suicideAttackTargets;
+    return getSetProperty(suicideAttackTargets);
   }
 
   private void resetSuicideAttackTargets() {
@@ -266,6 +255,9 @@ public class PlayerAttachment extends DefaultAttachment {
     if (r == null) {
       throw new GameParseException("no such resource: " + s[1] + thisErrorMsg());
     }
+    if (suicideAttackResources == null) {
+      suicideAttackResources = new IntegerMap<>();
+    }
     suicideAttackResources.put(r, attackValue);
   }
 
@@ -274,11 +266,11 @@ public class PlayerAttachment extends DefaultAttachment {
   }
 
   public IntegerMap<Resource> getSuicideAttackResources() {
-    return suicideAttackResources;
+    return getIntegerMapProperty(suicideAttackResources);
   }
 
   private void resetSuicideAttackResources() {
-    suicideAttackResources = new IntegerMap<>();
+    suicideAttackResources = null;
   }
 
   private void setVps(final int value) {
@@ -338,15 +330,7 @@ public class PlayerAttachment extends DefaultAttachment {
   }
 
   private void setGiveUnitControl(final String value) throws GameParseException {
-    final String[] temp = splitOnColon(value);
-    for (final String name : temp) {
-      final GamePlayer tempPlayer = getData().getPlayerList().getPlayerId(name);
-      if (tempPlayer != null) {
-        giveUnitControl.add(tempPlayer);
-      } else {
-        throw new GameParseException("No player named: " + name + thisErrorMsg());
-      }
-    }
+    giveUnitControl = parsePlayerList(value, giveUnitControl);
   }
 
   private void setGiveUnitControl(final List<GamePlayer> value) {
@@ -354,11 +338,11 @@ public class PlayerAttachment extends DefaultAttachment {
   }
 
   public List<GamePlayer> getGiveUnitControl() {
-    return giveUnitControl;
+    return getListProperty(giveUnitControl);
   }
 
   private void resetGiveUnitControl() {
-    giveUnitControl = new ArrayList<>();
+    giveUnitControl = null;
   }
 
   private void setGiveUnitControlInAllTerritories(final boolean value) {
@@ -370,15 +354,7 @@ public class PlayerAttachment extends DefaultAttachment {
   }
 
   private void setCaptureUnitOnEnteringBy(final String value) throws GameParseException {
-    final String[] temp = splitOnColon(value);
-    for (final String name : temp) {
-      final GamePlayer tempPlayer = getData().getPlayerList().getPlayerId(name);
-      if (tempPlayer != null) {
-        captureUnitOnEnteringBy.add(tempPlayer);
-      } else {
-        throw new GameParseException("No player named: " + name + thisErrorMsg());
-      }
-    }
+    captureUnitOnEnteringBy = parsePlayerList(value, captureUnitOnEnteringBy);
   }
 
   private void setCaptureUnitOnEnteringBy(final List<GamePlayer> value) {
@@ -386,23 +362,15 @@ public class PlayerAttachment extends DefaultAttachment {
   }
 
   public List<GamePlayer> getCaptureUnitOnEnteringBy() {
-    return captureUnitOnEnteringBy;
+    return getListProperty(captureUnitOnEnteringBy);
   }
 
   private void resetCaptureUnitOnEnteringBy() {
-    captureUnitOnEnteringBy = new ArrayList<>();
+    captureUnitOnEnteringBy = null;
   }
 
   private void setShareTechnology(final String value) throws GameParseException {
-    final String[] temp = splitOnColon(value);
-    for (final String name : temp) {
-      final GamePlayer tempPlayer = getData().getPlayerList().getPlayerId(name);
-      if (tempPlayer != null) {
-        shareTechnology.add(tempPlayer);
-      } else {
-        throw new GameParseException("No player named: " + name + thisErrorMsg());
-      }
-    }
+    shareTechnology = parsePlayerList(value, shareTechnology);
   }
 
   private void setShareTechnology(final List<GamePlayer> value) {
@@ -410,23 +378,15 @@ public class PlayerAttachment extends DefaultAttachment {
   }
 
   public List<GamePlayer> getShareTechnology() {
-    return shareTechnology;
+    return getListProperty(shareTechnology);
   }
 
   private void resetShareTechnology() {
-    shareTechnology = new ArrayList<>();
+    shareTechnology = null;
   }
 
   private void setHelpPayTechCost(final String value) throws GameParseException {
-    final String[] temp = splitOnColon(value);
-    for (final String name : temp) {
-      final GamePlayer tempPlayer = getData().getPlayerList().getPlayerId(name);
-      if (tempPlayer != null) {
-        helpPayTechCost.add(tempPlayer);
-      } else {
-        throw new GameParseException("No player named: " + name + thisErrorMsg());
-      }
-    }
+    helpPayTechCost = parsePlayerList(value, helpPayTechCost);
   }
 
   private void setHelpPayTechCost(final List<GamePlayer> value) {
@@ -434,11 +394,11 @@ public class PlayerAttachment extends DefaultAttachment {
   }
 
   public List<GamePlayer> getHelpPayTechCost() {
-    return helpPayTechCost;
+    return getListProperty(helpPayTechCost);
   }
 
   private void resetHelpPayTechCost() {
-    helpPayTechCost = new ArrayList<>();
+    helpPayTechCost = null;
   }
 
   private void setDestroysPUs(final String value) {
@@ -477,117 +437,100 @@ public class PlayerAttachment extends DefaultAttachment {
   public void validate(final GameState data) {}
 
   @Override
-  public Map<String, MutableProperty<?>> getPropertyMap() {
-    return ImmutableMap.<String, MutableProperty<?>>builder()
-        .put(
-            "vps",
-            MutableProperty.ofMapper(
-                DefaultAttachment::getInt, this::setVps, this::getVps, () -> 0))
-        .put(
-            "captureVps",
-            MutableProperty.of(
-                this::setCaptureVps,
-                this::setCaptureVps,
-                this::getCaptureVps,
-                this::resetCaptureVps))
-        .put(
-            "retainCapitalNumber",
-            MutableProperty.of(
-                this::setRetainCapitalNumber,
-                this::setRetainCapitalNumber,
-                this::getRetainCapitalNumber,
-                this::resetRetainCapitalNumber))
-        .put(
-            "retainCapitalProduceNumber",
-            MutableProperty.of(
-                this::setRetainCapitalProduceNumber,
-                this::setRetainCapitalProduceNumber,
-                this::getRetainCapitalProduceNumber,
-                this::resetRetainCapitalProduceNumber))
-        .put(
-            "giveUnitControl",
-            MutableProperty.of(
-                this::setGiveUnitControl,
-                this::setGiveUnitControl,
-                this::getGiveUnitControl,
-                this::resetGiveUnitControl))
-        .put(
-            "giveUnitControlInAllTerritories",
-            MutableProperty.ofMapper(
-                DefaultAttachment::getBool,
-                this::setGiveUnitControlInAllTerritories,
-                this::getGiveUnitControlInAllTerritories,
-                () -> false))
-        .put(
-            "captureUnitOnEnteringBy",
-            MutableProperty.of(
-                this::setCaptureUnitOnEnteringBy,
-                this::setCaptureUnitOnEnteringBy,
-                this::getCaptureUnitOnEnteringBy,
-                this::resetCaptureUnitOnEnteringBy))
-        .put(
-            "shareTechnology",
-            MutableProperty.of(
-                this::setShareTechnology,
-                this::setShareTechnology,
-                this::getShareTechnology,
-                this::resetShareTechnology))
-        .put(
-            "helpPayTechCost",
-            MutableProperty.of(
-                this::setHelpPayTechCost,
-                this::setHelpPayTechCost,
-                this::getHelpPayTechCost,
-                this::resetHelpPayTechCost))
-        .put(
-            "destroysPUs",
-            MutableProperty.of(
-                this::setDestroysPUs,
-                this::setDestroysPUs,
-                this::getDestroysPUs,
-                this::resetDestroysPUs))
-        .put(
-            "immuneToBlockade",
-            MutableProperty.of(
-                this::setImmuneToBlockade,
-                this::setImmuneToBlockade,
-                this::getImmuneToBlockade,
-                this::resetImmuneToBlockade))
-        .put(
-            "suicideAttackResources",
-            MutableProperty.of(
-                this::setSuicideAttackResources,
-                this::setSuicideAttackResources,
-                this::getSuicideAttackResources,
-                this::resetSuicideAttackResources))
-        .put(
-            "suicideAttackTargets",
-            MutableProperty.of(
-                this::setSuicideAttackTargets,
-                this::setSuicideAttackTargets,
-                this::getSuicideAttackTargets,
-                this::resetSuicideAttackTargets))
-        .put(
-            "placementLimit",
-            MutableProperty.of(
-                this::setPlacementLimit,
-                this::setPlacementLimit,
-                this::getPlacementLimit,
-                this::resetPlacementLimit))
-        .put(
-            "movementLimit",
-            MutableProperty.of(
-                this::setMovementLimit,
-                this::setMovementLimit,
-                this::getMovementLimit,
-                this::resetMovementLimit))
-        .put(
-            "attackingLimit",
-            MutableProperty.of(
-                this::setAttackingLimit,
-                this::setAttackingLimit,
-                this::getAttackingLimit,
-                this::resetAttackingLimit))
-        .build();
+  public MutableProperty<?> getPropertyOrNull(String propertyName) {
+    switch (propertyName) {
+      case "vps":
+        return MutableProperty.ofMapper(
+            DefaultAttachment::getInt, this::setVps, this::getVps, () -> 0);
+      case "captureVps":
+        return MutableProperty.of(
+            this::setCaptureVps, this::setCaptureVps, this::getCaptureVps, this::resetCaptureVps);
+      case "retainCapitalNumber":
+        return MutableProperty.of(
+            this::setRetainCapitalNumber,
+            this::setRetainCapitalNumber,
+            this::getRetainCapitalNumber,
+            this::resetRetainCapitalNumber);
+      case "retainCapitalProduceNumber":
+        return MutableProperty.of(
+            this::setRetainCapitalProduceNumber,
+            this::setRetainCapitalProduceNumber,
+            this::getRetainCapitalProduceNumber,
+            this::resetRetainCapitalProduceNumber);
+      case "giveUnitControl":
+        return MutableProperty.of(
+            this::setGiveUnitControl,
+            this::setGiveUnitControl,
+            this::getGiveUnitControl,
+            this::resetGiveUnitControl);
+      case "giveUnitControlInAllTerritories":
+        return MutableProperty.ofMapper(
+            DefaultAttachment::getBool,
+            this::setGiveUnitControlInAllTerritories,
+            this::getGiveUnitControlInAllTerritories,
+            () -> false);
+      case "captureUnitOnEnteringBy":
+        return MutableProperty.of(
+            this::setCaptureUnitOnEnteringBy,
+            this::setCaptureUnitOnEnteringBy,
+            this::getCaptureUnitOnEnteringBy,
+            this::resetCaptureUnitOnEnteringBy);
+      case "shareTechnology":
+        return MutableProperty.of(
+            this::setShareTechnology,
+            this::setShareTechnology,
+            this::getShareTechnology,
+            this::resetShareTechnology);
+      case "helpPayTechCost":
+        return MutableProperty.of(
+            this::setHelpPayTechCost,
+            this::setHelpPayTechCost,
+            this::getHelpPayTechCost,
+            this::resetHelpPayTechCost);
+      case "destroysPUs":
+        return MutableProperty.of(
+            this::setDestroysPUs,
+            this::setDestroysPUs,
+            this::getDestroysPUs,
+            this::resetDestroysPUs);
+      case "immuneToBlockade":
+        return MutableProperty.of(
+            this::setImmuneToBlockade,
+            this::setImmuneToBlockade,
+            this::getImmuneToBlockade,
+            this::resetImmuneToBlockade);
+      case "suicideAttackResources":
+        return MutableProperty.of(
+            this::setSuicideAttackResources,
+            this::setSuicideAttackResources,
+            this::getSuicideAttackResources,
+            this::resetSuicideAttackResources);
+      case "suicideAttackTargets":
+        return MutableProperty.of(
+            this::setSuicideAttackTargets,
+            this::setSuicideAttackTargets,
+            this::getSuicideAttackTargets,
+            this::resetSuicideAttackTargets);
+      case "placementLimit":
+        return MutableProperty.of(
+            this::setPlacementLimit,
+            this::setPlacementLimit,
+            this::getPlacementLimit,
+            this::resetPlacementLimit);
+      case "movementLimit":
+        return MutableProperty.of(
+            this::setMovementLimit,
+            this::setMovementLimit,
+            this::getMovementLimit,
+            this::resetMovementLimit);
+      case "attackingLimit":
+        return MutableProperty.of(
+            this::setAttackingLimit,
+            this::setAttackingLimit,
+            this::getAttackingLimit,
+            this::resetAttackingLimit);
+      default:
+        return null;
+    }
   }
 }

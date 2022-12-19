@@ -1,6 +1,5 @@
 package games.strategy.triplea.attachments;
 
-import com.google.common.collect.ImmutableMap;
 import games.strategy.engine.data.Attachable;
 import games.strategy.engine.data.GameData;
 import games.strategy.engine.data.GamePlayer;
@@ -20,17 +19,19 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
+import javax.annotation.Nullable;
 import org.triplea.java.collections.CollectionUtils;
 import org.triplea.util.Tuple;
 
 /**
  * A class of attachments that can be "activated" during a user action delegate. For now they will
- * just be conditions that can then fire triggers.
+ * just be conditions that can then fire triggers. Note: Empty collection fields default to null to
+ * minimize memory use and serialization size.
  */
 public class UserActionAttachment extends AbstractUserActionAttachment {
   private static final long serialVersionUID = 5268397563276055355L;
 
-  private List<Tuple<String, String>> activateTrigger = new ArrayList<>();
+  private @Nullable List<Tuple<String, String>> activateTrigger = null;
 
   public UserActionAttachment(
       final String name, final Attachable attachable, final GameData gameData) {
@@ -82,7 +83,10 @@ public class UserActionAttachment extends AbstractUserActionAttachment {
     getBool(s[3]);
     getBool(s[4]);
     getBool(s[5]);
-    activateTrigger.add(Tuple.of(s[0], options));
+    if (activateTrigger == null) {
+      activateTrigger = new ArrayList<>();
+    }
+    activateTrigger.add(Tuple.of(s[0].intern(), options.intern()));
   }
 
   private void setActivateTrigger(final List<Tuple<String, String>> value) {
@@ -90,11 +94,11 @@ public class UserActionAttachment extends AbstractUserActionAttachment {
   }
 
   private List<Tuple<String, String>> getActivateTrigger() {
-    return activateTrigger;
+    return getListProperty(activateTrigger);
   }
 
   private void resetActivateTrigger() {
-    activateTrigger = new ArrayList<>();
+    activateTrigger = null;
   }
 
   /**
@@ -155,7 +159,7 @@ public class UserActionAttachment extends AbstractUserActionAttachment {
   public Set<GamePlayer> getOtherPlayers() {
     final Set<GamePlayer> otherPlayers = new HashSet<>();
     otherPlayers.add((GamePlayer) this.getAttachedTo());
-    otherPlayers.addAll(actionAccept);
+    otherPlayers.addAll(getActionAccept());
     return otherPlayers;
   }
 
@@ -168,16 +172,16 @@ public class UserActionAttachment extends AbstractUserActionAttachment {
   }
 
   @Override
-  public Map<String, MutableProperty<?>> getPropertyMap() {
-    return ImmutableMap.<String, MutableProperty<?>>builder()
-        .putAll(super.getPropertyMap())
-        .put(
-            "activateTrigger",
-            MutableProperty.of(
-                this::setActivateTrigger,
-                this::setActivateTrigger,
-                this::getActivateTrigger,
-                this::resetActivateTrigger))
-        .build();
+  public MutableProperty<?> getPropertyOrNull(String propertyName) {
+    switch (propertyName) {
+      case "activateTrigger":
+        return MutableProperty.of(
+            this::setActivateTrigger,
+            this::setActivateTrigger,
+            this::getActivateTrigger,
+            this::resetActivateTrigger);
+      default:
+        return super.getPropertyOrNull(propertyName);
+    }
   }
 }

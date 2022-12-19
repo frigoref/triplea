@@ -6,7 +6,6 @@ import games.strategy.engine.data.UnitType;
 import games.strategy.triplea.Properties;
 import games.strategy.triplea.attachments.UnitAttachment;
 import games.strategy.triplea.delegate.Matches;
-import games.strategy.triplea.delegate.TransportTracker;
 import games.strategy.triplea.delegate.power.calculator.CombatValue;
 import java.util.Collection;
 import java.util.Comparator;
@@ -60,11 +59,9 @@ public class UnitBattleComparator implements Comparator<Unit> {
     if (u1.equals(u2)) {
       return 0;
     }
-    final boolean transporting1 = TransportTracker.isTransporting(u1);
-    final boolean transporting2 = TransportTracker.isTransporting(u2);
-    final UnitAttachment ua1 = UnitAttachment.get(u1.getType());
-    final UnitAttachment ua2 = UnitAttachment.get(u2.getType());
-    if (ua1.equals(ua2)
+    final boolean transporting1 = u1.isTransporting();
+    final boolean transporting2 = u2.isTransporting();
+    if (u1.getType().equals(u2.getType())
         && u1.isOwnedBy(u2.getOwner())
         && u1.getWasAmphibious() == u2.getWasAmphibious()) {
       if (transporting1 && !transporting2) {
@@ -78,11 +75,11 @@ public class UnitBattleComparator implements Comparator<Unit> {
     final boolean airOrCarrierOrTransport1 =
         Matches.unitIsAir().test(u1)
             || Matches.unitIsCarrier().test(u1)
-            || (!transporting1 && Matches.unitIsTransport().test(u1));
+            || (!transporting1 && Matches.unitIsSeaTransport().test(u1));
     final boolean airOrCarrierOrTransport2 =
         Matches.unitIsAir().test(u2)
             || Matches.unitIsCarrier().test(u2)
-            || (!transporting2 && Matches.unitIsTransport().test(u2));
+            || (!transporting2 && Matches.unitIsSeaTransport().test(u2));
     final boolean subDestroyer1 =
         Matches.unitHasSubBattleAbilities().test(u1) || Matches.unitIsDestroyer().test(u1);
     final boolean subDestroyer2 =
@@ -174,6 +171,8 @@ public class UnitBattleComparator implements Comparator<Unit> {
     } else if (!airOrCarrierOrTransport1 && airOrCarrierOrTransport2) {
       return -1;
     }
+    final UnitAttachment ua1 = u1.getUnitAttachment();
+    final UnitAttachment ua2 = u2.getUnitAttachment();
     return ua1.getMovement(u1.getOwner()) - ua2.getMovement(u2.getOwner());
   }
 }

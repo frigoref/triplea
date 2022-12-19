@@ -7,6 +7,7 @@ import static games.strategy.triplea.delegate.battle.FakeBattleState.givenBattle
 import static games.strategy.triplea.delegate.battle.steps.BattleStepsTest.givenAnyUnit;
 import static games.strategy.triplea.delegate.battle.steps.BattleStepsTest.givenUnitCanEvadeAndCanNotBeTargetedByRandomUnit;
 import static games.strategy.triplea.delegate.battle.steps.BattleStepsTest.givenUnitIsAir;
+import static games.strategy.triplea.delegate.battle.steps.MockGameData.givenGameData;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.hasSize;
 import static org.mockito.ArgumentMatchers.any;
@@ -16,7 +17,6 @@ import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import games.strategy.engine.data.GameData;
 import games.strategy.engine.data.GamePlayer;
 import games.strategy.engine.data.Unit;
 import games.strategy.engine.data.UnitType;
@@ -27,6 +27,7 @@ import games.strategy.triplea.attachments.UnitAttachment;
 import games.strategy.triplea.delegate.ExecutionStack;
 import games.strategy.triplea.delegate.battle.BattleActions;
 import games.strategy.triplea.delegate.battle.BattleState;
+import games.strategy.triplea.settings.AbstractClientSettingTestCase;
 import java.util.List;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
@@ -38,7 +39,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 @ExtendWith(MockitoExtension.class)
-class SubmergeSubsVsOnlyAirStepTest {
+class SubmergeSubsVsOnlyAirStepTest extends AbstractClientSettingTestCase {
 
   @Mock ExecutionStack executionStack;
   @Mock IDelegateBridge delegateBridge;
@@ -129,7 +130,7 @@ class SubmergeSubsVsOnlyAirStepTest {
     when(unitType.getAttachment(UNIT_ATTACHMENT_NAME)).thenReturn(unitAttachment);
     when(unitAttachment.getCanEvade()).thenReturn(true);
     when(unitAttachment.getCanNotBeTargetedBy()).thenReturn(Set.of(mock(UnitType.class)));
-    final Unit sub = new Unit(unitType, mock(GamePlayer.class), mock(GameData.class));
+    final Unit sub = new Unit(unitType, mock(GamePlayer.class), givenGameData().build());
     return List.of(
         Arguments.of(
             "Attacking subs submerge",

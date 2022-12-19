@@ -1,5 +1,7 @@
 package games.strategy.triplea.delegate.battle;
 
+import static java.util.function.Predicate.not;
+
 import games.strategy.engine.data.Change;
 import games.strategy.engine.data.CompositeChange;
 import games.strategy.engine.data.GameData;
@@ -28,6 +30,7 @@ import games.strategy.triplea.delegate.data.CasualtyDetails;
 import games.strategy.triplea.delegate.dice.RollDiceFactory;
 import games.strategy.triplea.delegate.power.calculator.CombatValueBuilder;
 import games.strategy.triplea.formatter.MyFormatter;
+import games.strategy.triplea.settings.ClientSetting;
 import games.strategy.triplea.util.TuvUtils;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -179,10 +182,8 @@ public class AirBattle extends AbstractBattle {
               if (!intercept) {
                 return;
               }
-              final IntegerMap<UnitType> defenderCosts =
-                  TuvUtils.getCostsForTuv(defender, gameData);
-              final IntegerMap<UnitType> attackerCosts =
-                  TuvUtils.getCostsForTuv(attacker, gameData);
+              final IntegerMap<UnitType> defenderCosts = bridge.getCostsForTuv(defender);
+              final IntegerMap<UnitType> attackerCosts = bridge.getCostsForTuv(attacker);
               attackingUnits.removeAll(attackingWaitingToDie);
               remove(attackingWaitingToDie, bridge, battleSite);
               defendingUnits.removeAll(defendingWaitingToDie);
@@ -198,7 +199,7 @@ public class AirBattle extends AbstractBattle {
               // kill any suicide attackers (veqryn)
               final Predicate<Unit> attackerSuicide =
                   PredicateBuilder.of(Matches.unitIsSuicideOnAttack())
-                      .andIf(isBombingRun, Matches.unitIsNotStrategicBomber())
+                      .andIf(isBombingRun, not(Matches.unitIsStrategicBomber()))
                       .build();
               if (attackingUnits.stream().anyMatch(attackerSuicide)) {
                 final List<Unit> suicideUnits =
@@ -351,7 +352,7 @@ public class AirBattle extends AbstractBattle {
             battleSite
                 .getUnitCollection()
                 .getMatches(
-                    Matches.enemyUnit(bridge.getGamePlayer(), gameData.getRelationshipTracker())
+                    Matches.enemyUnit(bridge.getGamePlayer())
                         .and(Matches.unitCanBeDamaged())
                         .and(Matches.unitIsBeingTransported().negate()));
         for (final Unit unit : bombers) {
@@ -505,7 +506,12 @@ public class AirBattle extends AbstractBattle {
     final GamePlayer retreatingPlayer = defender ? this.defender : attacker;
     final String text = retreatingPlayer.getName() + " retreat?";
     final String step = defender ? DEFENDERS_WITHDRAW : ATTACKERS_WITHDRAW;
-    bridge.getDisplayChannelBroadcaster().gotoBattleStep(battleId, step);
+
+    if (ClientSetting.useWebsocketNetwork.getValue().orElse(false)) {
+      bridge.sendMessage(new IDisplay.GoToBattleStepMessage(battleId.toString(), step));
+    } else {
+      bridge.getDisplayChannelBroadcaster().gotoBattleStep(battleId, step);
+    }
     final Territory retreatTo =
         getRemote(retreatingPlayer, bridge)
             .retreatQuery(battleId, false, battleSite, availableTerritories, text);
@@ -527,9 +533,19 @@ public class AirBattle extends AbstractBattle {
       final String messageShort = retreatingPlayer.getName() + " retreats";
       final String messageLong =
           retreatingPlayer.getName() + " retreats all units to " + retreatTo.getName();
-      bridge
-          .getDisplayChannelBroadcaster()
-          .notifyRetreat(messageShort, messageLong, step, retreatingPlayer);
+      if (ClientSetting.useWebsocketNetwork.getValue().orElse(false)) {
+        bridge.sendMessage(
+            IDisplay.NotifyRetreatMessage.builder()
+                .shortMessage(messageShort)
+                .message(messageLong)
+                .step(step)
+                .retreatingPlayerName(retreatingPlayer.getName())
+                .build());
+      } else {
+        bridge
+            .getDisplayChannelBroadcaster()
+            .notifyRetreat(messageShort, messageLong, step, retreatingPlayer);
+      }
     }
   }
 
@@ -584,7 +600,7 @@ public class AirBattle extends AbstractBattle {
     for (final Unit base :
         t.getUnitCollection()
             .getMatches(Matches.unitIsAirBase().and(Matches.unitIsNotDisabled()))) {
-      final int baseMax = UnitAttachment.get(base.getType()).getMaxInterceptCount();
+      final int baseMax = base.getUnitAttachment().getMaxInterceptCount();
       if (baseMax == -1) {
         return Integer.MAX_VALUE;
       }
@@ -843,7 +859,7 @@ public class AirBattle extends AbstractBattle {
   public static Predicate<Unit> defendingGroundSeaBattleInterceptors(
       final GamePlayer attacker, final GameState data) {
     return PredicateBuilder.of(Matches.unitCanAirBattle())
-        .and(Matches.unitIsEnemyOf(data.getRelationshipTracker(), attacker))
+        .and(Matches.unitIsEnemyOf(attacker))
         .and(Matches.unitWasInAirBattle().negate())
         .andIf(
             !Properties.getCanScrambleIntoAirBattles(data.getProperties()),
@@ -859,14 +875,14 @@ public class AirBattle extends AbstractBattle {
       final Territory territory, final GamePlayer attacker, final GameState data) {
     final Predicate<Unit> canIntercept =
         PredicateBuilder.of(Matches.unitCanIntercept())
-            .and(Matches.unitIsEnemyOf(data.getRelationshipTracker(), attacker))
+            .and(Matches.unitIsEnemyOf(attacker))
             .and(Matches.unitWasInAirBattle().negate())
             .andIf(
                 !Properties.getCanScrambleIntoAirBattles(data.getProperties()),
                 Matches.unitWasScrambled().negate())
             .build();
     final Predicate<Unit> airbasesCanIntercept =
-        Matches.unitIsEnemyOf(data.getRelationshipTracker(), attacker)
+        Matches.unitIsEnemyOf(attacker)
             .and(Matches.unitIsAirBase())
             .and(Matches.unitIsNotDisabled())
             .and(Matches.unitIsBeingTransported().negate());
@@ -891,7 +907,7 @@ public class AirBattle extends AbstractBattle {
     int maxScrambleDistance = 0;
     if (canScrambleToAirBattle) {
       for (final UnitType unitType : data.getUnitTypeList()) {
-        final UnitAttachment ua = UnitAttachment.get(unitType);
+        final UnitAttachment ua = unitType.getUnitAttachment();
         if (ua.getCanScramble() && maxScrambleDistance < ua.getMaxScrambleDistance()) {
           maxScrambleDistance = ua.getMaxScrambleDistance();
         }

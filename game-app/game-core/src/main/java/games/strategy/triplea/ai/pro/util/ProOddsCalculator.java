@@ -8,6 +8,7 @@ import games.strategy.engine.data.Unit;
 import games.strategy.triplea.Properties;
 import games.strategy.triplea.ai.pro.ProData;
 import games.strategy.triplea.ai.pro.data.ProBattleResult;
+import games.strategy.triplea.ai.pro.data.ProTerritory;
 import games.strategy.triplea.delegate.Matches;
 import games.strategy.triplea.delegate.TerritoryEffectHelper;
 import games.strategy.triplea.odds.calculator.AggregateResults;
@@ -53,7 +54,7 @@ public class ProOddsCalculator {
 
     // Determine if attackers have no chance
     final double strengthDifference =
-        ProBattleUtils.estimateStrengthDifference(proData, t, attackingUnits, defendingUnits);
+        ProBattleUtils.estimateStrengthDifference(t, attackingUnits, defendingUnits);
     if (strengthDifference < 45) {
       return new ProBattleResult(0, -999, false, new ArrayList<>(), defendingUnits, 1);
     }
@@ -81,7 +82,7 @@ public class ProOddsCalculator {
 
     // Determine if defenders have no chance
     final double strengthDifference =
-        ProBattleUtils.estimateStrengthDifference(proData, t, attackingUnits, defendingUnits);
+        ProBattleUtils.estimateStrengthDifference(t, attackingUnits, defendingUnits);
     if (strengthDifference > 55) {
       final boolean isLandAndCanOnlyBeAttackedByAir =
           !t.isWater()
@@ -98,6 +99,16 @@ public class ProOddsCalculator {
     return callBattleCalc(proData, t, attackingUnits, defendingUnits, bombardingUnits);
   }
 
+  public ProBattleResult estimateDefendBattleResults(
+      final ProData proData, final ProTerritory proTerritory, final Collection<Unit> defenders) {
+    return estimateDefendBattleResults(
+        proData,
+        proTerritory.getTerritory(),
+        proTerritory.getMaxEnemyUnits(),
+        defenders,
+        proTerritory.getMaxEnemyBombardUnits());
+  }
+
   public ProBattleResult calculateBattleResultsNoSubmerge(
       final ProData proData,
       final Territory t,
@@ -106,6 +117,21 @@ public class ProOddsCalculator {
       final Collection<Unit> bombardingUnits) {
     return calculateBattleResults(
         proData, t, attackingUnits, defendingUnits, bombardingUnits, false);
+  }
+
+  public ProBattleResult calculateBattleResults(
+      final ProData proData, final ProTerritory proTerritory, final Collection<Unit> defenders) {
+    return calculateBattleResults(
+        proData,
+        proTerritory.getTerritory(),
+        proTerritory.getMaxEnemyUnits(),
+        defenders,
+        proTerritory.getMaxEnemyBombardUnits());
+  }
+
+  public ProBattleResult calculateBattleResults(
+      final ProData proData, final ProTerritory proTerritory) {
+    return calculateBattleResults(proData, proTerritory, proTerritory.getAllDefenders());
   }
 
   public ProBattleResult calculateBattleResults(
@@ -125,7 +151,6 @@ public class ProOddsCalculator {
       final Collection<Unit> defendingUnits,
       final Collection<Unit> bombardingUnits,
       final boolean checkSubmerge) {
-
     final ProBattleResult result =
         checkIfNoAttackersOrDefenders(proData, t, attackingUnits, defendingUnits, checkSubmerge);
     if (result != null) {

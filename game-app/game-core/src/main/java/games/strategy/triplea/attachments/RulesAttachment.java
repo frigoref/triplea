@@ -3,7 +3,6 @@ package games.strategy.triplea.attachments;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 
-import com.google.common.collect.ImmutableMap;
 import games.strategy.engine.data.Attachable;
 import games.strategy.engine.data.BattleRecordsList;
 import games.strategy.engine.data.GameData;
@@ -20,6 +19,7 @@ import games.strategy.engine.data.Unit;
 import games.strategy.engine.data.UnitType;
 import games.strategy.engine.data.gameparser.GameParseException;
 import games.strategy.engine.delegate.IDelegateBridge;
+import games.strategy.engine.posted.game.pbem.PbemMessagePoster;
 import games.strategy.engine.random.IRandomStats.DiceType;
 import games.strategy.triplea.Constants;
 import games.strategy.triplea.Properties;
@@ -36,6 +36,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Predicate;
+import javax.annotation.Nullable;
 import org.triplea.java.Interruptibles;
 import org.triplea.java.collections.CollectionUtils;
 import org.triplea.java.collections.IntegerMap;
@@ -43,40 +44,41 @@ import org.triplea.util.Tuple;
 
 /**
  * An attachment for instances of {@link GamePlayer} that defines various conditions for enabling
- * certain rules (see the class description of {@link AbstractPlayerRulesAttachment}).
+ * certain rules (see the class description of {@link AbstractPlayerRulesAttachment}). Note: Empty
+ * collection fields default to null to minimize memory use and serialization size.
  */
 public class RulesAttachment extends AbstractPlayerRulesAttachment {
   private static final long serialVersionUID = 7301965634079412516L;
 
   // condition for having techs
-  private List<TechAdvance> techs = null;
+  private @Nullable List<TechAdvance> techs = null;
   private int techCount = -1;
   // condition for having specific relationships
-  private List<String> relationship = new ArrayList<>();
+  private @Nullable List<String> relationship = null;
   // condition for being at war
-  private Set<GamePlayer> atWarPlayers = null;
+  private @Nullable Set<GamePlayer> atWarPlayers = null;
   private int atWarCount = -1;
   // condition for having destroyed at least X enemy non-neutral TUV (total unit value) [according
   // to
   // the prices the defender pays for the units]
-  private String destroyedTuv = null;
+  private @Nullable String destroyedTuv = null;
   // condition for having had a battle in some territory, attacker or defender, win
   // or lost, etc. these next 9 variables use territoryCount for determining the number needed.
-  private List<Tuple<String, List<Territory>>> battle = new ArrayList<>();
+  private @Nullable List<Tuple<String, List<Territory>>> battle = null;
   // ownership related
-  private String[] alliedOwnershipTerritories = null;
-  private String[] directOwnershipTerritories = null;
+  private @Nullable String[] alliedOwnershipTerritories = null;
+  private @Nullable String[] directOwnershipTerritories = null;
   // exclusion of units
-  private String[] alliedExclusionTerritories = null;
-  private String[] directExclusionTerritories = null;
-  private String[] enemyExclusionTerritories = null;
-  private String[] enemySurfaceExclusionTerritories = null;
+  private @Nullable String[] alliedExclusionTerritories = null;
+  private @Nullable String[] directExclusionTerritories = null;
+  private @Nullable String[] enemyExclusionTerritories = null;
+  private @Nullable String[] enemySurfaceExclusionTerritories = null;
   // presence of units
-  private String[] directPresenceTerritories = null;
-  private String[] alliedPresenceTerritories = null;
-  private String[] enemyPresenceTerritories = null;
+  private @Nullable String[] directPresenceTerritories = null;
+  private @Nullable String[] alliedPresenceTerritories = null;
+  private @Nullable String[] enemyPresenceTerritories = null;
   // used with above 3 to determine the type of unit that must be present
-  private IntegerMap<String> unitPresence = new IntegerMap<>();
+  private @Nullable IntegerMap<String> unitPresence = null;
 
   public RulesAttachment(final String name, final Attachable attachable, final GameData gameData) {
     super(name, attachable, gameData);
@@ -144,10 +146,6 @@ public class RulesAttachment extends AbstractPlayerRulesAttachment {
   }
 
   private void setDestroyedTuv(final String value) throws GameParseException {
-    if (value == null) {
-      destroyedTuv = null;
-      return;
-    }
     final String[] s = splitOnColon(value);
     if (s.length != 2) {
       throw new GameParseException(
@@ -165,10 +163,10 @@ public class RulesAttachment extends AbstractPlayerRulesAttachment {
       throw new GameParseException(
           "destroyedTUV value must be currentRound or allRounds" + thisErrorMsg());
     }
-    destroyedTuv = value;
+    destroyedTuv = value.intern();
   }
 
-  private String getDestroyedTuv() {
+  private @Nullable String getDestroyedTuv() {
     return destroyedTuv;
   }
 
@@ -214,7 +212,10 @@ public class RulesAttachment extends AbstractPlayerRulesAttachment {
       }
       terrs.add(t);
     }
-    battle.add(Tuple.of((s[0] + ":" + s[1] + ":" + s[2] + ":" + s[3]), terrs));
+    if (battle == null) {
+      battle = new ArrayList<>();
+    }
+    battle.add(Tuple.of((s[0] + ":" + s[1] + ":" + s[2] + ":" + s[3]).intern(), terrs));
   }
 
   private void setBattle(final List<Tuple<String, List<Territory>>> value) {
@@ -222,11 +223,11 @@ public class RulesAttachment extends AbstractPlayerRulesAttachment {
   }
 
   private List<Tuple<String, List<Territory>>> getBattle() {
-    return battle;
+    return getListProperty(battle);
   }
 
   private void resetBattle() {
-    battle = new ArrayList<>();
+    battle = null;
   }
 
   /**
@@ -275,7 +276,11 @@ public class RulesAttachment extends AbstractPlayerRulesAttachment {
               + "default value if you don't know what to put"
               + thisErrorMsg());
     }
-    relationship.add((s.length == 3) ? (value + ":-1") : value);
+    if (relationship == null) {
+      relationship = new ArrayList<>();
+    }
+    String str = (s.length == 3) ? (value + ":-1") : value;
+    relationship.add(str.intern());
   }
 
   private void setRelationship(final List<String> value) {
@@ -283,18 +288,14 @@ public class RulesAttachment extends AbstractPlayerRulesAttachment {
   }
 
   private List<String> getRelationship() {
-    return relationship;
+    return getListProperty(relationship);
   }
 
   private void resetRelationship() {
-    relationship = new ArrayList<>();
+    relationship = null;
   }
 
   private void setAlliedOwnershipTerritories(final String value) {
-    if (value == null) {
-      alliedOwnershipTerritories = null;
-      return;
-    }
     alliedOwnershipTerritories = splitOnColon(value);
     validateNames(alliedOwnershipTerritories);
   }
@@ -313,10 +314,6 @@ public class RulesAttachment extends AbstractPlayerRulesAttachment {
 
   // exclusion types = controlled, controlledNoWater, original, all, or list
   private void setAlliedExclusionTerritories(final String value) {
-    if (value == null) {
-      alliedExclusionTerritories = null;
-      return;
-    }
     alliedExclusionTerritories = splitOnColon(value);
     validateNames(alliedExclusionTerritories);
   }
@@ -334,10 +331,6 @@ public class RulesAttachment extends AbstractPlayerRulesAttachment {
   }
 
   private void setDirectExclusionTerritories(final String value) {
-    if (value == null) {
-      directExclusionTerritories = null;
-      return;
-    }
     directExclusionTerritories = splitOnColon(value);
     validateNames(directExclusionTerritories);
   }
@@ -356,10 +349,6 @@ public class RulesAttachment extends AbstractPlayerRulesAttachment {
 
   // exclusion types = original or list
   private void setEnemyExclusionTerritories(final String value) {
-    if (value == null) {
-      enemyExclusionTerritories = null;
-      return;
-    }
     enemyExclusionTerritories = splitOnColon(value);
     validateNames(enemyExclusionTerritories);
   }
@@ -377,10 +366,6 @@ public class RulesAttachment extends AbstractPlayerRulesAttachment {
   }
 
   private void setDirectPresenceTerritories(final String value) {
-    if (value == null) {
-      directPresenceTerritories = null;
-      return;
-    }
     directPresenceTerritories = splitOnColon(value);
     validateNames(directPresenceTerritories);
   }
@@ -398,10 +383,6 @@ public class RulesAttachment extends AbstractPlayerRulesAttachment {
   }
 
   private void setAlliedPresenceTerritories(final String value) {
-    if (value == null) {
-      alliedPresenceTerritories = null;
-      return;
-    }
     alliedPresenceTerritories = splitOnColon(value);
     validateNames(alliedPresenceTerritories);
   }
@@ -419,10 +400,6 @@ public class RulesAttachment extends AbstractPlayerRulesAttachment {
   }
 
   private void setEnemyPresenceTerritories(final String value) {
-    if (value == null) {
-      enemyPresenceTerritories = null;
-      return;
-    }
     enemyPresenceTerritories = splitOnColon(value);
     validateNames(enemyPresenceTerritories);
   }
@@ -441,10 +418,6 @@ public class RulesAttachment extends AbstractPlayerRulesAttachment {
 
   // exclusion types = original or list
   private void setEnemySurfaceExclusionTerritories(final String value) {
-    if (value == null) {
-      enemySurfaceExclusionTerritories = null;
-      return;
-    }
     enemySurfaceExclusionTerritories = splitOnColon(value);
     validateNames(enemySurfaceExclusionTerritories);
   }
@@ -462,10 +435,6 @@ public class RulesAttachment extends AbstractPlayerRulesAttachment {
   }
 
   private void setDirectOwnershipTerritories(final String value) {
-    if (value == null) {
-      directOwnershipTerritories = null;
-      return;
-    }
     directOwnershipTerritories = splitOnColon(value);
     validateNames(directOwnershipTerritories);
   }
@@ -502,7 +471,10 @@ public class RulesAttachment extends AbstractPlayerRulesAttachment {
         throw new GameParseException("No unit called: " + unitTypeToProduce + thisErrorMsg());
       }
     }
-    unitPresence.put(value.replaceFirst(s[0] + ":", ""), n);
+    if (unitPresence == null) {
+      unitPresence = new IntegerMap<>();
+    }
+    unitPresence.put(value.substring(s[0].length() + 1).intern(), n);
   }
 
   private void setUnitPresence(final IntegerMap<String> value) {
@@ -510,11 +482,11 @@ public class RulesAttachment extends AbstractPlayerRulesAttachment {
   }
 
   private IntegerMap<String> getUnitPresence() {
-    return unitPresence;
+    return getIntegerMapProperty(unitPresence);
   }
 
   private void resetUnitPresence() {
-    unitPresence = new IntegerMap<>();
+    unitPresence = null;
   }
 
   private int getAtWarCount() {
@@ -526,10 +498,6 @@ public class RulesAttachment extends AbstractPlayerRulesAttachment {
   }
 
   private void setAtWarPlayers(final String players) throws GameParseException {
-    if (players == null) {
-      atWarPlayers = null;
-      return;
-    }
     final String[] s = splitOnColon(players);
     if (s.length < 1) {
       throw new GameParseException("Empty enemy list" + thisErrorMsg());
@@ -546,11 +514,7 @@ public class RulesAttachment extends AbstractPlayerRulesAttachment {
     }
     atWarPlayers = new HashSet<>();
     for (int i = count == -1 ? 0 : 1; i < s.length; i++) {
-      final GamePlayer player = getData().getPlayerList().getPlayerId(s[i]);
-      if (player == null) {
-        throw new GameParseException("Could not find player. name:" + s[i] + thisErrorMsg());
-      }
-      atWarPlayers.add(player);
+      atWarPlayers.add(getPlayerOrThrow(s[i]));
     }
   }
 
@@ -559,7 +523,7 @@ public class RulesAttachment extends AbstractPlayerRulesAttachment {
   }
 
   private Set<GamePlayer> getAtWarPlayers() {
-    return atWarPlayers;
+    return getSetProperty(atWarPlayers);
   }
 
   private void resetAtWarPlayers() {
@@ -567,10 +531,6 @@ public class RulesAttachment extends AbstractPlayerRulesAttachment {
   }
 
   private void setTechs(final String newTechs) throws GameParseException {
-    if (newTechs == null) {
-      techs = null;
-      return;
-    }
     final String[] s = splitOnColon(newTechs);
     if (s.length < 1) {
       throw new GameParseException("Empty tech list" + thisErrorMsg());
@@ -604,7 +564,7 @@ public class RulesAttachment extends AbstractPlayerRulesAttachment {
   }
 
   private List<TechAdvance> getTechs() {
-    return techs;
+    return getListProperty(techs);
   }
 
   private void resetTechs() {
@@ -629,7 +589,7 @@ public class RulesAttachment extends AbstractPlayerRulesAttachment {
     final List<GamePlayer> players = getPlayers();
     final GameState data = delegateBridge.getData();
     // check meta conditions (conditions which hold other conditions)
-    if (!conditions.isEmpty()) {
+    if (!getConditions().isEmpty()) {
       final Map<ICondition, Boolean> actualTestedConditions =
           Optional.ofNullable(testedConditions)
               .orElseGet(
@@ -647,7 +607,7 @@ public class RulesAttachment extends AbstractPlayerRulesAttachment {
     }
     // check turn limits
     if (objectiveMet && turns != null) {
-      objectiveMet = checkTurns(data);
+      objectiveMet = checkRounds(data);
     }
     // check custom game property options
     if (objectiveMet && gameProperty != null) {
@@ -663,13 +623,12 @@ public class RulesAttachment extends AbstractPlayerRulesAttachment {
     if (objectiveMet && getAlliedPresenceTerritories() != null) {
       objectiveMet =
           checkUnitPresence(
-              getAlliedPresenceTerritories(), alliedOwnership(data, players), players, data);
+              getAlliedPresenceTerritories(), alliedOwnership(players), players, data);
     }
     // Check for unit presence (Veqryn)
     if (objectiveMet && getEnemyPresenceTerritories() != null) {
       objectiveMet =
-          checkUnitPresence(
-              getEnemyPresenceTerritories(), enemyOwnership(data, players), players, data);
+          checkUnitPresence(getEnemyPresenceTerritories(), enemyOwnership(players), players, data);
     }
     // Check for direct unit exclusions (veqryn)
     if (objectiveMet && getDirectExclusionTerritories() != null) {
@@ -682,7 +641,7 @@ public class RulesAttachment extends AbstractPlayerRulesAttachment {
       objectiveMet =
           checkUnitExclusions(
               getAlliedExclusionTerritories(),
-              directOwnership(players).negate().and(alliedOwnership(data, players)),
+              directOwnership(players).negate().and(alliedOwnership(players)),
               players,
               data);
     }
@@ -690,16 +649,13 @@ public class RulesAttachment extends AbstractPlayerRulesAttachment {
     if (objectiveMet && getEnemyExclusionTerritories() != null) {
       objectiveMet =
           checkUnitExclusions(
-              getEnemyExclusionTerritories(), enemyOwnership(data, players), players, data);
+              getEnemyExclusionTerritories(), enemyOwnership(players), players, data);
     }
     // Check for enemy unit exclusions (SURFACE UNITS with ATTACK POWER)
     if (objectiveMet && getEnemySurfaceExclusionTerritories() != null) {
       objectiveMet =
           checkUnitExclusions(
-              getEnemySurfaceExclusionTerritories(),
-              enemySurfaceOwnership(data, players),
-              players,
-              data);
+              getEnemySurfaceExclusionTerritories(), enemySurfaceOwnership(players), players, data);
     }
     // Check for Territory Ownership rules
     if (objectiveMet && getAlliedOwnershipTerritories() != null) {
@@ -712,14 +668,14 @@ public class RulesAttachment extends AbstractPlayerRulesAttachment {
             final Collection<GamePlayer> allies =
                 CollectionUtils.getMatches(
                     data.getPlayerList().getPlayers(),
-                    Matches.isAlliedWithAnyOfThesePlayers(players, data.getRelationshipTracker()));
+                    Matches.isAlliedWithAnyOfThesePlayers(players));
             listedTerritories = getTerritoryListBasedOnInputFromXml(terrs, allies, data);
             break;
           case "enemy":
             final Collection<GamePlayer> enemies =
                 CollectionUtils.getMatches(
                     data.getPlayerList().getPlayers(),
-                    Matches.isAtWarWithAnyOfThesePlayers(players, data.getRelationshipTracker()));
+                    Matches.isAtWarWithAnyOfThesePlayers(players));
             listedTerritories = getTerritoryListBasedOnInputFromXml(terrs, enemies, data);
             break;
           default:
@@ -732,14 +688,14 @@ public class RulesAttachment extends AbstractPlayerRulesAttachment {
             final Collection<GamePlayer> allies =
                 CollectionUtils.getMatches(
                     data.getPlayerList().getPlayers(),
-                    Matches.isAlliedWithAnyOfThesePlayers(players, data.getRelationshipTracker()));
+                    Matches.isAlliedWithAnyOfThesePlayers(players));
             listedTerritories = getTerritoryListBasedOnInputFromXml(terrs, allies, data);
             break;
           case "enemy":
             final Collection<GamePlayer> enemies =
                 CollectionUtils.getMatches(
                     data.getPlayerList().getPlayers(),
-                    Matches.isAtWarWithAnyOfThesePlayers(players, data.getRelationshipTracker()));
+                    Matches.isAtWarWithAnyOfThesePlayers(players));
             listedTerritories = getTerritoryListBasedOnInputFromXml(terrs, enemies, data);
             break;
           default:
@@ -760,8 +716,7 @@ public class RulesAttachment extends AbstractPlayerRulesAttachment {
         if ("enemy".equals(terrs[0])) {
           final Collection<GamePlayer> enemies =
               CollectionUtils.getMatches(
-                  data.getPlayerList().getPlayers(),
-                  Matches.isAtWarWithAnyOfThesePlayers(players, data.getRelationshipTracker()));
+                  data.getPlayerList().getPlayers(), Matches.isAtWarWithAnyOfThesePlayers(players));
           listedTerritories = getTerritoryListBasedOnInputFromXml(terrs, enemies, data);
         } else {
           listedTerritories = getTerritoryListBasedOnInputFromXml(terrs, players, data);
@@ -770,8 +725,7 @@ public class RulesAttachment extends AbstractPlayerRulesAttachment {
         if ("enemy".equals(terrs[1])) {
           final Collection<GamePlayer> enemies =
               CollectionUtils.getMatches(
-                  data.getPlayerList().getPlayers(),
-                  Matches.isAtWarWithAnyOfThesePlayers(players, data.getRelationshipTracker()));
+                  data.getPlayerList().getPlayers(), Matches.isAtWarWithAnyOfThesePlayers(players));
           listedTerritories = getTerritoryListBasedOnInputFromXml(terrs, enemies, data);
         } else {
           listedTerritories = getTerritoryListBasedOnInputFromXml(terrs, players, data);
@@ -783,14 +737,14 @@ public class RulesAttachment extends AbstractPlayerRulesAttachment {
     }
     // get attached to player
     final GamePlayer playerAttachedTo = (GamePlayer) getAttachedTo();
-    if (objectiveMet && getAtWarPlayers() != null) {
-      objectiveMet = checkAtWar(playerAttachedTo, getAtWarPlayers(), getAtWarCount(), data);
+    if (objectiveMet && !getAtWarPlayers().isEmpty()) {
+      objectiveMet = checkAtWar(playerAttachedTo, getAtWarPlayers(), getAtWarCount());
     }
-    if (objectiveMet && techs != null) {
+    if (objectiveMet && !getTechs().isEmpty()) {
       objectiveMet = checkTechs(playerAttachedTo, data.getTechnologyFrontier());
     }
     // check for relationships
-    if (objectiveMet && !relationship.isEmpty()) {
+    if (objectiveMet && !getRelationship().isEmpty()) {
       objectiveMet = checkRelationships();
     }
     // check for battle stats
@@ -816,7 +770,7 @@ public class RulesAttachment extends AbstractPlayerRulesAttachment {
       }
     }
     // check for battles
-    if (objectiveMet && !battle.isEmpty()) {
+    if (objectiveMet && !getBattle().isEmpty()) {
       final BattleRecordsList brl = data.getBattleRecordsList();
       final int round = data.getSequence().getRound();
       for (final Tuple<String, List<Territory>> entry : battle) {
@@ -857,12 +811,12 @@ public class RulesAttachment extends AbstractPlayerRulesAttachment {
         changeChanceDecrementOrIncrementOnSuccessOrFailure(delegateBridge, objectiveMet, false);
       } else {
         // there is an issue with maps using thousands of chance triggers: they are causing the
-        // crypted random source
-        // (i.e.: live and pbem games) to lock up or error out
-        // so we need to slow them down a bit, until we come up with a better solution (like
-        // aggregating all the chances
-        // together, then getting a ton of random numbers at once instead of one at a time)
-        Interruptibles.sleep(100);
+        // cypted random source (ie: live and pbem games) to lock up or error out so we need to slow
+        // them down a bit, until we come up with a better solution (like aggregating all the
+        // chances together, then getting a ton of random numbers at once instead of one at a time)
+        if (PbemMessagePoster.gameDataHasPlayByEmailOrForumMessengers(data)) {
+          Interruptibles.sleep(100);
+        }
         final int rollResult =
             delegateBridge.getRandom(
                     diceSides,
@@ -898,7 +852,7 @@ public class RulesAttachment extends AbstractPlayerRulesAttachment {
    * @return whether all relationships as are required are set correctly.
    */
   private boolean checkRelationships() {
-    for (final String encodedRelationCheck : relationship) {
+    for (final String encodedRelationCheck : getRelationship()) {
       final String[] relationCheck = splitOnColon(encodedRelationCheck);
       final GamePlayer p1 = getData().getPlayerList().getPlayerId(relationCheck[0]);
       final GamePlayer p2 = getData().getPlayerList().getPlayerId(relationCheck[1]);
@@ -936,19 +890,19 @@ public class RulesAttachment extends AbstractPlayerRulesAttachment {
     return Matches.unitIsOwnedByAnyOf(players);
   }
 
-  private Predicate<Unit> alliedOwnership(GameState data, Collection<GamePlayer> players) {
-    return Matches.alliedUnitOfAnyOfThesePlayers(players, data.getRelationshipTracker());
+  private Predicate<Unit> alliedOwnership(Collection<GamePlayer> players) {
+    return Matches.alliedUnitOfAnyOfThesePlayers(players);
   }
 
-  private Predicate<Unit> enemyOwnership(GameState data, Collection<GamePlayer> players) {
-    return Matches.enemyUnitOfAnyOfThesePlayers(players, data.getRelationshipTracker());
+  private Predicate<Unit> enemyOwnership(Collection<GamePlayer> players) {
+    return Matches.enemyUnitOfAnyOfThesePlayers(players);
   }
 
-  private Predicate<Unit> enemySurfaceOwnership(GameState data, Collection<GamePlayer> players) {
-    return Matches.enemyUnitOfAnyOfThesePlayers(players, data.getRelationshipTracker())
+  private Predicate<Unit> enemySurfaceOwnership(Collection<GamePlayer> players) {
+    return Matches.enemyUnitOfAnyOfThesePlayers(players)
         .and(Matches.unitIsSea())
         .and(Matches.unitCanEvade().negate())
-        .and(Matches.unitIsNotTransportButCouldBeCombatTransport());
+        .and(Matches.unitIsNotSeaTransportButCouldBeCombatSeaTransport());
   }
 
   /**
@@ -1025,8 +979,7 @@ public class RulesAttachment extends AbstractPlayerRulesAttachment {
       final GameState data) {
     final Collection<GamePlayer> allies =
         CollectionUtils.getMatches(
-            data.getPlayerList().getPlayers(),
-            Matches.isAlliedWithAnyOfThesePlayers(players, data.getRelationshipTracker()));
+            data.getPlayerList().getPlayers(), Matches.isAlliedWithAnyOfThesePlayers(players));
     return matchTerritories(territories, Matches.isTerritoryOwnedByAnyOf(allies));
   }
 
@@ -1049,16 +1002,8 @@ public class RulesAttachment extends AbstractPlayerRulesAttachment {
   }
 
   private boolean checkAtWar(
-      final GamePlayer player,
-      final Set<GamePlayer> enemies,
-      final int count,
-      final GameState data) {
-    int found = 0;
-    for (final GamePlayer e : enemies) {
-      if (data.getRelationshipTracker().isAtWar(player, e)) {
-        found++;
-      }
-    }
+      final GamePlayer player, final Set<GamePlayer> enemies, final int count) {
+    int found = CollectionUtils.countMatches(enemies, player::isAtWar);
     if (count == 0) {
       return found == 0;
     }
@@ -1070,9 +1015,11 @@ public class RulesAttachment extends AbstractPlayerRulesAttachment {
 
   private boolean checkTechs(final GamePlayer player, final TechnologyFrontier technologyFrontier) {
     int found = 0;
-    for (final TechAdvance a : TechTracker.getCurrentTechAdvances(player, technologyFrontier)) {
-      if (techs.contains(a)) {
-        found++;
+    if (techs != null) {
+      for (final TechAdvance a : TechTracker.getCurrentTechAdvances(player, technologyFrontier)) {
+        if (techs.contains(a)) {
+          found++;
+        }
       }
     }
     if (techCount == 0) {
@@ -1098,106 +1045,94 @@ public class RulesAttachment extends AbstractPlayerRulesAttachment {
   }
 
   @Override
-  public Map<String, MutableProperty<?>> getPropertyMap() {
-    return ImmutableMap.<String, MutableProperty<?>>builder()
-        .putAll(super.getPropertyMap())
-        .put(
-            "techs",
-            MutableProperty.of(this::setTechs, this::setTechs, this::getTechs, this::resetTechs))
-        .put("techCount", MutableProperty.ofReadOnly(this::getTechCount))
-        .put(
-            "relationship",
-            MutableProperty.of(
-                this::setRelationship,
-                this::setRelationship,
-                this::getRelationship,
-                this::resetRelationship))
-        .put(
-            "atWarPlayers",
-            MutableProperty.of(
-                this::setAtWarPlayers,
-                this::setAtWarPlayers,
-                this::getAtWarPlayers,
-                this::resetAtWarPlayers))
-        .put("atWarCount", MutableProperty.ofReadOnly(this::getAtWarCount))
-        .put(
-            "destroyedTUV",
-            MutableProperty.ofString(
-                this::setDestroyedTuv, this::getDestroyedTuv, this::resetDestroyedTuv))
-        .put(
-            "battle",
-            MutableProperty.of(
-                this::setBattle, this::setBattle, this::getBattle, this::resetBattle))
-        .put(
-            "alliedOwnershipTerritories",
-            MutableProperty.of(
-                this::setAlliedOwnershipTerritories,
-                this::setAlliedOwnershipTerritories,
-                this::getAlliedOwnershipTerritories,
-                this::resetAlliedOwnershipTerritories))
-        .put(
-            "directOwnershipTerritories",
-            MutableProperty.of(
-                this::setDirectOwnershipTerritories,
-                this::setDirectOwnershipTerritories,
-                this::getDirectOwnershipTerritories,
-                this::resetDirectOwnershipTerritories))
-        .put(
-            "alliedExclusionTerritories",
-            MutableProperty.of(
-                this::setAlliedExclusionTerritories,
-                this::setAlliedExclusionTerritories,
-                this::getAlliedExclusionTerritories,
-                this::resetAlliedExclusionTerritories))
-        .put(
-            "directExclusionTerritories",
-            MutableProperty.of(
-                this::setDirectExclusionTerritories,
-                this::setDirectExclusionTerritories,
-                this::getDirectExclusionTerritories,
-                this::resetDirectExclusionTerritories))
-        .put(
-            "enemyExclusionTerritories",
-            MutableProperty.of(
-                this::setEnemyExclusionTerritories,
-                this::setEnemyExclusionTerritories,
-                this::getEnemyExclusionTerritories,
-                this::resetEnemyExclusionTerritories))
-        .put(
-            "enemySurfaceExclusionTerritories",
-            MutableProperty.of(
-                this::setEnemySurfaceExclusionTerritories,
-                this::setEnemySurfaceExclusionTerritories,
-                this::getEnemySurfaceExclusionTerritories,
-                this::resetEnemySurfaceExclusionTerritories))
-        .put(
-            "directPresenceTerritories",
-            MutableProperty.of(
-                this::setDirectPresenceTerritories,
-                this::setDirectPresenceTerritories,
-                this::getDirectPresenceTerritories,
-                this::resetDirectPresenceTerritories))
-        .put(
-            "alliedPresenceTerritories",
-            MutableProperty.of(
-                this::setAlliedPresenceTerritories,
-                this::setAlliedPresenceTerritories,
-                this::getAlliedPresenceTerritories,
-                this::resetAlliedPresenceTerritories))
-        .put(
-            "enemyPresenceTerritories",
-            MutableProperty.of(
-                this::setEnemyPresenceTerritories,
-                this::setEnemyPresenceTerritories,
-                this::getEnemyPresenceTerritories,
-                this::resetEnemyPresenceTerritories))
-        .put(
-            "unitPresence",
-            MutableProperty.of(
-                this::setUnitPresence,
-                this::setUnitPresence,
-                this::getUnitPresence,
-                this::resetUnitPresence))
-        .build();
+  public MutableProperty<?> getPropertyOrNull(String propertyName) {
+    switch (propertyName) {
+      case "techs":
+        return MutableProperty.of(this::setTechs, this::setTechs, this::getTechs, this::resetTechs);
+      case "techCount":
+        return MutableProperty.ofReadOnly(this::getTechCount);
+      case "relationship":
+        return MutableProperty.of(
+            this::setRelationship,
+            this::setRelationship,
+            this::getRelationship,
+            this::resetRelationship);
+      case "atWarPlayers":
+        return MutableProperty.of(
+            this::setAtWarPlayers,
+            this::setAtWarPlayers,
+            this::getAtWarPlayers,
+            this::resetAtWarPlayers);
+      case "atWarCount":
+        return MutableProperty.ofReadOnly(this::getAtWarCount);
+      case "destroyedTUV":
+        return MutableProperty.ofString(
+            this::setDestroyedTuv, this::getDestroyedTuv, this::resetDestroyedTuv);
+      case "battle":
+        return MutableProperty.of(
+            this::setBattle, this::setBattle, this::getBattle, this::resetBattle);
+      case "alliedOwnershipTerritories":
+        return MutableProperty.of(
+            this::setAlliedOwnershipTerritories,
+            this::setAlliedOwnershipTerritories,
+            this::getAlliedOwnershipTerritories,
+            this::resetAlliedOwnershipTerritories);
+      case "directOwnershipTerritories":
+        return MutableProperty.of(
+            this::setDirectOwnershipTerritories,
+            this::setDirectOwnershipTerritories,
+            this::getDirectOwnershipTerritories,
+            this::resetDirectOwnershipTerritories);
+      case "alliedExclusionTerritories":
+        return MutableProperty.of(
+            this::setAlliedExclusionTerritories,
+            this::setAlliedExclusionTerritories,
+            this::getAlliedExclusionTerritories,
+            this::resetAlliedExclusionTerritories);
+      case "directExclusionTerritories":
+        return MutableProperty.of(
+            this::setDirectExclusionTerritories,
+            this::setDirectExclusionTerritories,
+            this::getDirectExclusionTerritories,
+            this::resetDirectExclusionTerritories);
+      case "enemyExclusionTerritories":
+        return MutableProperty.of(
+            this::setEnemyExclusionTerritories,
+            this::setEnemyExclusionTerritories,
+            this::getEnemyExclusionTerritories,
+            this::resetEnemyExclusionTerritories);
+      case "enemySurfaceExclusionTerritories":
+        return MutableProperty.of(
+            this::setEnemySurfaceExclusionTerritories,
+            this::setEnemySurfaceExclusionTerritories,
+            this::getEnemySurfaceExclusionTerritories,
+            this::resetEnemySurfaceExclusionTerritories);
+      case "directPresenceTerritories":
+        return MutableProperty.of(
+            this::setDirectPresenceTerritories,
+            this::setDirectPresenceTerritories,
+            this::getDirectPresenceTerritories,
+            this::resetDirectPresenceTerritories);
+      case "alliedPresenceTerritories":
+        return MutableProperty.of(
+            this::setAlliedPresenceTerritories,
+            this::setAlliedPresenceTerritories,
+            this::getAlliedPresenceTerritories,
+            this::resetAlliedPresenceTerritories);
+      case "enemyPresenceTerritories":
+        return MutableProperty.of(
+            this::setEnemyPresenceTerritories,
+            this::setEnemyPresenceTerritories,
+            this::getEnemyPresenceTerritories,
+            this::resetEnemyPresenceTerritories);
+      case "unitPresence":
+        return MutableProperty.of(
+            this::setUnitPresence,
+            this::setUnitPresence,
+            this::getUnitPresence,
+            this::resetUnitPresence);
+      default:
+        return super.getPropertyOrNull(propertyName);
+    }
   }
 }

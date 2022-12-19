@@ -7,7 +7,6 @@ import games.strategy.engine.data.GameData;
 import games.strategy.engine.data.GamePlayer;
 import games.strategy.engine.display.IDisplay;
 import games.strategy.engine.framework.AbstractGame;
-import games.strategy.engine.framework.IGame;
 import games.strategy.engine.framework.ServerGame;
 import games.strategy.engine.history.IDelegateHistoryWriter;
 import games.strategy.engine.message.MessengerException;
@@ -16,7 +15,8 @@ import games.strategy.engine.random.IRandomSource;
 import games.strategy.engine.random.IRandomStats.DiceType;
 import games.strategy.engine.random.RandomStats;
 import games.strategy.net.websocket.ClientNetworkBridge;
-import java.util.Properties;
+import games.strategy.triplea.ResourceLoader;
+import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import org.triplea.http.client.web.socket.messages.WebSocketMessage;
 import org.triplea.sound.ISound;
@@ -25,12 +25,12 @@ import org.triplea.sound.ISound;
 @RequiredArgsConstructor
 public class DefaultDelegateBridge implements IDelegateBridge {
   private final GameData gameData;
-  private final IGame game;
+  private final ServerGame game;
   private final IDelegateHistoryWriter historyWriter;
   private final RandomStats randomStats;
   private final DelegateExecutionManager delegateExecutionManager;
   private final ClientNetworkBridge clientNetworkBridge;
-  private IRandomSource randomSource;
+  private final IRandomSource randomSource;
 
   @Override
   public GameData getData() {
@@ -40,10 +40,6 @@ public class DefaultDelegateBridge implements IDelegateBridge {
   @Override
   public GamePlayer getGamePlayer() {
     return gameData.getSequence().getStep().getPlayerId();
-  }
-
-  public void setRandomSource(final IRandomSource randomSource) {
-    this.randomSource = randomSource;
   }
 
   /**
@@ -82,11 +78,6 @@ public class DefaultDelegateBridge implements IDelegateBridge {
     if (!change.isEmpty()) {
       game.addChange(change);
     }
-  }
-
-  @Override
-  public String getStepName() {
-    return gameData.getSequence().getStep().getName();
   }
 
   @Override
@@ -133,11 +124,6 @@ public class DefaultDelegateBridge implements IDelegateBridge {
   }
 
   @Override
-  public Properties getStepProperties() {
-    return gameData.getSequence().getStep().getProperties();
-  }
-
-  @Override
   public void leaveDelegateExecution() {
     delegateExecutionManager.leaveDelegateExecution();
   }
@@ -148,12 +134,17 @@ public class DefaultDelegateBridge implements IDelegateBridge {
   }
 
   @Override
-  public void stopGameSequence() {
-    ((ServerGame) game).stopGameSequence();
+  public void stopGameSequence(String status, String title) {
+    game.stopGameSequence(status, title);
   }
 
   @Override
   public void sendMessage(final WebSocketMessage webSocketMessage) {
     clientNetworkBridge.sendMessage(webSocketMessage);
+  }
+
+  @Override
+  public Optional<ResourceLoader> getResourceLoader() {
+    return Optional.of(game.getResourceLoader());
   }
 }

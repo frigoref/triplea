@@ -1,5 +1,6 @@
 package games.strategy.triplea.ui.history;
 
+import com.google.common.base.Preconditions;
 import games.strategy.engine.data.GameData;
 import games.strategy.engine.data.GamePlayer;
 import games.strategy.engine.history.HistoryNode;
@@ -12,13 +13,16 @@ import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.Insets;
 import java.awt.Rectangle;
+import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseListener;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.Deque;
 import java.util.Enumeration;
+import java.util.Optional;
 import javax.swing.ImageIcon;
 import javax.swing.JButton;
 import javax.swing.JPanel;
@@ -56,19 +60,11 @@ public class HistoryPanel extends JPanel {
       final HistoryDetailsPanel details,
       final JPopupMenu popup,
       final UiContext uiContext) {
-    mouseOverPanel = false;
-    mouseWasOverPanel = false;
+    Preconditions.checkState(data.areChangesOnlyInSwingEventThread());
+    this.data = data;
+    this.details = details;
     final MouseListener mouseFocusListener =
-        new MouseListener() {
-          @Override
-          public void mouseReleased(final MouseEvent e) {}
-
-          @Override
-          public void mousePressed(final MouseEvent e) {}
-
-          @Override
-          public void mouseClicked(final MouseEvent e) {}
-
+        new MouseAdapter() {
           @Override
           public void mouseExited(final MouseEvent e) {
             mouseOverPanel = false;
@@ -80,16 +76,10 @@ public class HistoryPanel extends JPanel {
           }
         };
     addMouseListener(mouseFocusListener);
-    this.data = data;
-    this.details = details;
     setLayout(new BorderLayout());
-    if (!this.data.areChangesOnlyInSwingEventThread()) {
-      throw new IllegalStateException();
-    }
     tree = new JTree(this.data.getHistory());
     // Register the tree with the tooltip manager to make the tooltips we set work.
     ToolTipManager.sharedInstance().registerComponent(tree);
-    this.data.getHistory().setTreePanel(this);
     tree.expandRow(0);
     this.popup = popup;
     tree.add(this.popup);
@@ -121,12 +111,10 @@ public class HistoryPanel extends JPanel {
     scroll.setBorder(null);
     scroll.setViewportBorder(null);
     add(scroll, BorderLayout.CENTER);
+    HistoryNode node = data.getHistory().enableSeeking(this);
     tree.setEditable(false);
-    final HistoryNode node = this.data.getHistory().getLastNode();
-    this.data.getHistory().gotoNode(node);
     tree.expandPath(new TreePath(node.getPath()));
     tree.setSelectionPath(new TreePath(node.getPath()));
-    currentPopupNode = null;
     final JButton previousButton = new JButton("<-Back");
     previousButton.addMouseListener(mouseFocusListener);
     previousButton.addActionListener(e -> previous());
@@ -165,7 +153,7 @@ public class HistoryPanel extends JPanel {
             0));
     add(buttons, BorderLayout.SOUTH);
     tree.addMouseListener(
-        new MouseListener() {
+        new MouseAdapter() {
           @Override
           public void mouseClicked(final MouseEvent me) {
             if (SwingUtilities.isRightMouseButton(me)) {
@@ -203,12 +191,6 @@ public class HistoryPanel extends JPanel {
           public void mouseExited(final MouseEvent me) {
             mouseOverPanel = false;
           }
-
-          @Override
-          public void mousePressed(final MouseEvent me) {}
-
-          @Override
-          public void mouseReleased(final MouseEvent me) {}
         });
     tree.addTreeSelectionListener(this::treeSelectionChanged);
   }
@@ -218,9 +200,7 @@ public class HistoryPanel extends JPanel {
       tree.setSelectionInterval(0, 0);
       return;
     }
-    final TreePath path = tree.getSelectionPath();
-    final TreeNode selected = (TreeNode) path.getLastPathComponent();
-    @SuppressWarnings("unchecked")
+    final TreeNode selected = getCurrentNode();
     final Enumeration<TreeNode> nodeEnum =
         ((DefaultMutableTreeNode) tree.getModel().getRoot()).depthFirstEnumeration();
     TreeNode previous = null;
@@ -261,9 +241,7 @@ public class HistoryPanel extends JPanel {
       tree.setSelectionInterval(0, 0);
       return;
     }
-    final TreePath path = tree.getSelectionPath();
-    final TreeNode selected = (TreeNode) path.getLastPathComponent();
-    @SuppressWarnings("unchecked")
+    final TreeNode selected = getCurrentNode();
     final Enumeration<TreeNode> nodeEnum =
         ((DefaultMutableTreeNode) tree.getModel().getRoot()).preorderEnumeration();
     TreeNode next = null;
@@ -294,7 +272,11 @@ public class HistoryPanel extends JPanel {
     if (details != null) {
       details.render(node);
     }
-    data.getHistory().gotoNode(node);
+    // If this is not a leaf node, set the game state to the last leaf node before it. This way,
+    // selecting something like "Round 3" shows the state at the start of the round, which ensures
+    // chronological order when moving up/down the nodes using arrow keys even if some are expanded.
+    Optional<HistoryNode> target = data.getHistory().getNearestLeafAtOrBefore(node);
+    data.getHistory().gotoNode(target.orElse((HistoryNode) node.getRoot()));
   }
 
   public HistoryNode getCurrentNode() {
@@ -308,14 +290,6 @@ public class HistoryPanel extends JPanel {
 
   public void clearCurrentPopupNode() {
     currentPopupNode = null;
-  }
-
-  private void addToStayExpanded(final Enumeration<TreePath> paths) {
-    final Collection<TreePath> expandPaths = new ArrayList<>();
-    while (paths.hasMoreElements()) {
-      expandPaths.add(paths.nextElement());
-    }
-    stayExpandedPaths.addAll(expandPaths);
   }
 
   /**
@@ -340,12 +314,7 @@ public class HistoryPanel extends JPanel {
    * @param parentPath tree path for which descendants should be check.
    */
   private boolean stayExpandedContainsDescendantOf(final TreePath parentPath) {
-    for (final TreePath currentPath : stayExpandedPaths) {
-      if (parentPath.isDescendant(currentPath)) {
-        return true;
-      }
-    }
-    return false;
+    return stayExpandedPaths.stream().anyMatch(parentPath::isDescendant);
   }
 
   /**
@@ -384,11 +353,8 @@ public class HistoryPanel extends JPanel {
   /** Selects the most recent history node, expanding the tree if necessary. */
   public void goToEnd() {
     final HistoryNode last;
-    try {
-      data.acquireWriteLock();
+    try (GameData.Unlocker ignored = data.acquireWriteLock()) {
       last = data.getHistory().getLastNode();
-    } finally {
-      data.releaseWriteLock();
     }
     final TreePath path = new TreePath(last.getPath());
     final TreePath parent = path.getParentPath();
@@ -403,7 +369,7 @@ public class HistoryPanel extends JPanel {
       collapseExpanded(path);
       collapseUpFromLastParent(parent);
       final Rectangle rect = tree.getPathBounds(path);
-      rect.setRect(0, rect.getY(), rect.getWidth(), rect.getHeight());
+      rect.x = 0;
       tree.scrollRectToVisible(rect);
     } else {
       if (!mouseWasOverPanel) {
@@ -414,7 +380,7 @@ public class HistoryPanel extends JPanel {
           root = root.getParentPath();
         }
         final Enumeration<TreePath> expandedDescendants = tree.getExpandedDescendants(root);
-        addToStayExpanded(expandedDescendants);
+        stayExpandedPaths.addAll(Collections.list(expandedDescendants));
       } else {
         collapseUpFromLastParent(parent);
       }
@@ -445,7 +411,7 @@ public class HistoryPanel extends JPanel {
       if (value instanceof Step) {
         final GamePlayer player = ((Step) value).getPlayerId();
         if (player != null) {
-          final String text = value.toString() + " (" + player.getName() + ")";
+          final String text = value + " (" + player.getName() + ")";
           if (uiContext != null) {
             super.getTreeCellRendererComponent(tree, value, sel, expanded, leaf, row, haveFocus);
             icon.setImage(uiContext.getFlagImageFactory().getSmallFlag(player));

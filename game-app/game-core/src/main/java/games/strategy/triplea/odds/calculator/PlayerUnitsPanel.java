@@ -11,7 +11,7 @@ import games.strategy.engine.data.UnitType;
 import games.strategy.triplea.attachments.UnitAttachment;
 import games.strategy.triplea.delegate.Matches;
 import games.strategy.triplea.ui.UiContext;
-import games.strategy.triplea.util.TuvUtils;
+import games.strategy.triplea.util.TuvCostsCalculator;
 import games.strategy.triplea.util.UnitCategory;
 import games.strategy.triplea.util.UnitSeparator;
 import java.util.ArrayList;
@@ -80,8 +80,8 @@ public class PlayerUnitsPanel extends JPanel {
           }
           final UnitType ut1 = c1.getType();
           final UnitType ut2 = c2.getType();
-          final UnitAttachment u1 = UnitAttachment.get(ut1);
-          final UnitAttachment u2 = UnitAttachment.get(ut2);
+          final UnitAttachment u1 = ut1.getUnitAttachment();
+          final UnitAttachment u2 = ut2.getUnitAttachment();
           // For land battles, sort by land, air, can't combat move (AA), bombarding
           if (land) {
             if (u1.getIsSea() != u2.getIsSea()) {
@@ -119,11 +119,8 @@ public class PlayerUnitsPanel extends JPanel {
       predicate = Matches.unitTypeIsSeaOrAir();
     }
     final IntegerMap<UnitType> costs;
-    try {
-      data.acquireReadLock();
-      costs = TuvUtils.getCostsForTuv(gamePlayer, data);
-    } finally {
-      data.releaseReadLock();
+    try (GameData.Unlocker ignored = data.acquireReadLock()) {
+      costs = new TuvCostsCalculator().getCostsForTuv(gamePlayer);
     }
 
     GamePlayer previousPlayer = null;

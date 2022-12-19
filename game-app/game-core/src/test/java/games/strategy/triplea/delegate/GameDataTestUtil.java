@@ -21,7 +21,6 @@ import games.strategy.engine.data.changefactory.ChangeFactory;
 import games.strategy.engine.data.properties.BooleanProperty;
 import games.strategy.engine.data.properties.IEditableProperty;
 import games.strategy.triplea.Constants;
-import games.strategy.triplea.attachments.TechAttachment;
 import games.strategy.triplea.delegate.battle.BattleDelegate;
 import games.strategy.triplea.util.TransportUtils;
 import java.util.Collection;
@@ -240,6 +239,10 @@ public final class GameDataTestUtil {
     return unitType("britishInfantry", data);
   }
 
+  public static UnitType japaneseInfantry(final GameState data) {
+    return unitType("japaneseInfantry", data);
+  }
+
   /** Returns a bomber UnitType object for the specified GameData object. */
   public static UnitType bomber(final GameState data) {
     return unitType(Constants.UNIT_TYPE_BOMBER, data);
@@ -336,7 +339,7 @@ public final class GameDataTestUtil {
   /**
    * Returns a UnitType object matching the given name for the specified GameData object if present.
    */
-  static UnitType unitType(final String name, final GameState data) {
+  public static UnitType unitType(final String name, final GameState data) {
     return data.getUnitTypeList().getUnitType(name);
   }
 
@@ -462,7 +465,7 @@ public final class GameDataTestUtil {
   }
 
   static void givePlayerRadar(final GamePlayer player) {
-    TechAttachment.get(player).setAaRadar(Boolean.TRUE.toString());
+    player.getTechAttachment().setAaRadar(Boolean.TRUE.toString());
   }
 
   /** Helper method to check if a String is null and otherwise print the String. */

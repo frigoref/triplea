@@ -22,7 +22,11 @@ public class ProResourceTracker {
   }
 
   public boolean hasEnough(final ProPurchaseOption ppo) {
-    return getRemaining().greaterThanOrEqualTo(ppo.getCosts());
+    return hasEnough(ppo.getCosts());
+  }
+
+  public boolean hasEnough(final IntegerMap<Resource> amount) {
+    return getRemaining().greaterThanOrEqualTo(amount);
   }
 
   public void purchase(final ProPurchaseOption ppo) {
@@ -66,7 +70,7 @@ public class ProResourceTracker {
 
   @Override
   public String toString() {
-    return getRemaining().toString();
+    return getRemaining().toString().replaceAll("\n", " ");
   }
 
   private IntegerMap<Resource> getRemaining() {

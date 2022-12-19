@@ -1,7 +1,6 @@
 package games.strategy.triplea.attachments;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.collect.ImmutableMap;
 import games.strategy.engine.data.Attachable;
 import games.strategy.engine.data.DefaultAttachment;
 import games.strategy.engine.data.GameData;
@@ -17,9 +16,13 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import javax.annotation.Nullable;
 import org.triplea.java.collections.IntegerMap;
 
-/** An attachment for instances of {@link TerritoryEffect}. */
+/**
+ * An attachment for instances of {@link TerritoryEffect}. Note: Empty collection fields default to
+ * null to minimize memory use and serialization size.
+ */
 public class TerritoryEffectAttachment extends DefaultAttachment {
 
   public static final String COMBAT_OFFENSE_EFFECT = "combatOffenseEffect";
@@ -27,11 +30,11 @@ public class TerritoryEffectAttachment extends DefaultAttachment {
 
   private static final long serialVersionUID = 6379810228136325991L;
 
-  private IntegerMap<UnitType> combatDefenseEffect = new IntegerMap<>();
-  private IntegerMap<UnitType> combatOffenseEffect = new IntegerMap<>();
-  private Map<UnitType, BigDecimal> movementCostModifier = new HashMap<>();
-  private List<UnitType> noBlitz = new ArrayList<>();
-  private List<UnitType> unitsNotAllowed = new ArrayList<>();
+  private @Nullable IntegerMap<UnitType> combatDefenseEffect = null;
+  private @Nullable IntegerMap<UnitType> combatOffenseEffect = null;
+  private @Nullable Map<UnitType, BigDecimal> movementCostModifier = null;
+  private @Nullable List<UnitType> noBlitz = null;
+  private @Nullable List<UnitType> unitsNotAllowed = null;
 
   public TerritoryEffectAttachment(
       final String name, final Attachable attachable, final GameData gameData) {
@@ -57,11 +60,11 @@ public class TerritoryEffectAttachment extends DefaultAttachment {
   }
 
   private IntegerMap<UnitType> getCombatDefenseEffect() {
-    return new IntegerMap<>(combatDefenseEffect);
+    return getIntegerMapProperty(combatDefenseEffect);
   }
 
   private void resetCombatDefenseEffect() {
-    combatDefenseEffect = new IntegerMap<>();
+    combatDefenseEffect = null;
   }
 
   private void setCombatOffenseEffect(final String combatOffenseEffect) throws GameParseException {
@@ -75,11 +78,11 @@ public class TerritoryEffectAttachment extends DefaultAttachment {
   }
 
   private IntegerMap<UnitType> getCombatOffenseEffect() {
-    return new IntegerMap<>(combatOffenseEffect);
+    return getIntegerMapProperty(combatOffenseEffect);
   }
 
   private void resetCombatOffenseEffect() {
-    combatOffenseEffect = new IntegerMap<>();
+    combatOffenseEffect = null;
   }
 
   private void setCombatEffect(final String combatEffect, final boolean defending)
@@ -93,21 +96,25 @@ public class TerritoryEffectAttachment extends DefaultAttachment {
     final Iterator<String> iter = List.of(s).iterator();
     final int effect = getInt(iter.next());
     while (iter.hasNext()) {
-      final String unitTypeToProduce = iter.next();
-      final UnitType ut = getData().getUnitTypeList().getUnitType(unitTypeToProduce);
-      if (ut == null) {
-        throw new GameParseException("No unit called: " + unitTypeToProduce + thisErrorMsg());
-      }
+      final UnitType ut = getUnitTypeOrThrow(iter.next());
       if (defending) {
+        if (combatDefenseEffect == null) {
+          combatDefenseEffect = new IntegerMap<>();
+        }
         combatDefenseEffect.put(ut, effect);
       } else {
+        if (combatOffenseEffect == null) {
+          combatOffenseEffect = new IntegerMap<>();
+        }
         combatOffenseEffect.put(ut, effect);
       }
     }
   }
 
   public int getCombatEffect(final UnitType type, final boolean defending) {
-    return defending ? combatDefenseEffect.getInt(type) : combatOffenseEffect.getInt(type);
+    return defending
+        ? getCombatDefenseEffect().getInt(type)
+        : getCombatOffenseEffect().getInt(type);
   }
 
   private void setMovementCostModifier(final String value) throws GameParseException {
@@ -117,14 +124,18 @@ public class TerritoryEffectAttachment extends DefaultAttachment {
           "movementCostModifier must have a count and at least one unitType" + thisErrorMsg());
     }
     final Iterator<String> iter = List.of(s).iterator();
-    final BigDecimal effect = getBigDecimal(iter.next());
+    final BigDecimal effect;
+    try {
+      effect = new BigDecimal(iter.next());
+    } catch (final NumberFormatException e) {
+      throw new IllegalArgumentException(
+          "Attachments: " + s[0] + " is not a valid decimal value", e);
+    }
     while (iter.hasNext()) {
-      final String unitTypeToProduce = iter.next();
-      final UnitType ut = getData().getUnitTypeList().getUnitType(unitTypeToProduce);
-      if (ut == null) {
-        throw new GameParseException("No unit called: " + unitTypeToProduce + thisErrorMsg());
+      if (movementCostModifier == null) {
+        movementCostModifier = new HashMap<>();
       }
-      movementCostModifier.put(ut, effect);
+      movementCostModifier.put(getUnitTypeOrThrow(iter.next()), effect);
     }
   }
 
@@ -133,11 +144,11 @@ public class TerritoryEffectAttachment extends DefaultAttachment {
   }
 
   public Map<UnitType, BigDecimal> getMovementCostModifier() {
-    return new HashMap<>(movementCostModifier);
+    return getMapProperty(movementCostModifier);
   }
 
   private void resetMovementCostModifier() {
-    movementCostModifier = new HashMap<>();
+    movementCostModifier = null;
   }
 
   private void setNoBlitz(final String noBlitzUnitTypes) throws GameParseException {
@@ -146,11 +157,10 @@ public class TerritoryEffectAttachment extends DefaultAttachment {
       throw new GameParseException("noBlitz must have at least one unitType" + thisErrorMsg());
     }
     for (final String unitTypeName : s) {
-      final UnitType ut = getData().getUnitTypeList().getUnitType(unitTypeName);
-      if (ut == null) {
-        throw new GameParseException("No unit called:" + unitTypeName + thisErrorMsg());
+      if (noBlitz == null) {
+        noBlitz = new ArrayList<>();
       }
-      noBlitz.add(ut);
+      noBlitz.add(getUnitTypeOrThrow(unitTypeName));
     }
   }
 
@@ -159,11 +169,11 @@ public class TerritoryEffectAttachment extends DefaultAttachment {
   }
 
   public List<UnitType> getNoBlitz() {
-    return new ArrayList<>(noBlitz);
+    return getListProperty(noBlitz);
   }
 
   private void resetNoBlitz() {
-    noBlitz = new ArrayList<>();
+    noBlitz = null;
   }
 
   private void setUnitsNotAllowed(final String unitsNotAllowedUnitTypes) throws GameParseException {
@@ -173,11 +183,10 @@ public class TerritoryEffectAttachment extends DefaultAttachment {
           "unitsNotAllowed must have at least one unitType" + thisErrorMsg());
     }
     for (final String unitTypeName : s) {
-      final UnitType ut = getData().getUnitTypeList().getUnitType(unitTypeName);
-      if (ut == null) {
-        throw new GameParseException("No unit called:" + unitTypeName + thisErrorMsg());
+      if (unitsNotAllowed == null) {
+        unitsNotAllowed = new ArrayList<>();
       }
-      unitsNotAllowed.add(ut);
+      unitsNotAllowed.add(getUnitTypeOrThrow(unitTypeName));
     }
   }
 
@@ -186,51 +195,48 @@ public class TerritoryEffectAttachment extends DefaultAttachment {
   }
 
   public List<UnitType> getUnitsNotAllowed() {
-    return new ArrayList<>(unitsNotAllowed);
+    return getListProperty(unitsNotAllowed);
   }
 
   private void resetUnitsNotAllowed() {
-    unitsNotAllowed = new ArrayList<>();
+    unitsNotAllowed = null;
   }
 
   @Override
   public void validate(final GameState data) {}
 
   @Override
-  public Map<String, MutableProperty<?>> getPropertyMap() {
-    return ImmutableMap.<String, MutableProperty<?>>builder()
-        .put(
-            COMBAT_DEFENSE_EFFECT,
-            MutableProperty.of(
-                this::setCombatDefenseEffect,
-                this::setCombatDefenseEffect,
-                this::getCombatDefenseEffect,
-                this::resetCombatDefenseEffect))
-        .put(
-            COMBAT_OFFENSE_EFFECT,
-            MutableProperty.of(
-                this::setCombatOffenseEffect,
-                this::setCombatOffenseEffect,
-                this::getCombatOffenseEffect,
-                this::resetCombatOffenseEffect))
-        .put(
-            "movementCostModifier",
-            MutableProperty.of(
-                this::setMovementCostModifier,
-                this::setMovementCostModifier,
-                this::getMovementCostModifier,
-                this::resetMovementCostModifier))
-        .put(
-            "noBlitz",
-            MutableProperty.of(
-                this::setNoBlitz, this::setNoBlitz, this::getNoBlitz, this::resetNoBlitz))
-        .put(
-            "unitsNotAllowed",
-            MutableProperty.of(
-                this::setUnitsNotAllowed,
-                this::setUnitsNotAllowed,
-                this::getUnitsNotAllowed,
-                this::resetUnitsNotAllowed))
-        .build();
+  public MutableProperty<?> getPropertyOrNull(String propertyName) {
+    switch (propertyName) {
+      case COMBAT_DEFENSE_EFFECT:
+        return MutableProperty.of(
+            this::setCombatDefenseEffect,
+            this::setCombatDefenseEffect,
+            this::getCombatDefenseEffect,
+            this::resetCombatDefenseEffect);
+      case COMBAT_OFFENSE_EFFECT:
+        return MutableProperty.of(
+            this::setCombatOffenseEffect,
+            this::setCombatOffenseEffect,
+            this::getCombatOffenseEffect,
+            this::resetCombatOffenseEffect);
+      case "movementCostModifier":
+        return MutableProperty.of(
+            this::setMovementCostModifier,
+            this::setMovementCostModifier,
+            this::getMovementCostModifier,
+            this::resetMovementCostModifier);
+      case "noBlitz":
+        return MutableProperty.of(
+            this::setNoBlitz, this::setNoBlitz, this::getNoBlitz, this::resetNoBlitz);
+      case "unitsNotAllowed":
+        return MutableProperty.of(
+            this::setUnitsNotAllowed,
+            this::setUnitsNotAllowed,
+            this::getUnitsNotAllowed,
+            this::resetUnitsNotAllowed);
+      default:
+        return null;
+    }
   }
 }

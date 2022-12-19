@@ -73,9 +73,7 @@ class ProScrambleAi {
       if (maxCanScramble < canScrambleAir.size()) {
         canScrambleAir.sort(
             Comparator.<Unit>comparingDouble(
-                    o ->
-                        ProBattleUtils.estimateStrength(
-                            scrambleTo, List.of(o), new ArrayList<>(), false))
+                    o -> ProBattleUtils.estimateStrength(scrambleTo, List.of(o), List.of(), false))
                 .reversed());
         canScrambleAir = canScrambleAir.subList(0, maxCanScramble);
       }
@@ -99,7 +97,7 @@ class ProScrambleAi {
     final Map<Unit, Set<Territory>> unitDefendOptions = new HashMap<>();
     for (final Territory t : possibleMaxScramblerMap.keySet()) {
       final Set<Territory> possibleTerritories =
-          data.getMap().getNeighbors(t, ProMatches.territoryCanMoveSeaUnits(data, player, true));
+          data.getMap().getNeighbors(t, ProMatches.territoryCanMoveSeaUnits(player, true));
       possibleTerritories.add(t);
       final Set<Territory> battleTerritories = new HashSet<>();
       for (final Territory possibleTerritory : possibleTerritories) {
