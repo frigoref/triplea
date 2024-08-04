@@ -3,8 +3,8 @@ package games.strategy.engine.lobby.client.login;
 import com.google.common.base.Strings;
 import feign.FeignException;
 import games.strategy.engine.framework.ui.background.BackgroundTaskRunner;
+import games.strategy.triplea.settings.ClientSetting;
 import java.io.IOException;
-import java.net.URI;
 import java.util.Optional;
 import javax.annotation.Nullable;
 import javax.swing.JFrame;
@@ -16,6 +16,7 @@ import org.triplea.http.client.forgot.password.ForgotPasswordRequest;
 import org.triplea.http.client.lobby.login.CreateAccountResponse;
 import org.triplea.http.client.lobby.login.LobbyLoginClient;
 import org.triplea.http.client.lobby.login.LobbyLoginResponse;
+import org.triplea.live.servers.LiveServersFetcher;
 import org.triplea.swing.DialogBuilder;
 import org.triplea.swing.SwingComponents;
 
@@ -31,13 +32,11 @@ public class LobbyLogin {
   private static final String CONNECTING_TO_LOBBY = "Connecting to lobby...";
   private final JFrame parentWindow;
 
-  private final URI lobbyUri;
   private final LobbyLoginClient lobbyLoginClient;
 
-  public LobbyLogin(final JFrame parentWindow, final URI lobbyUri) {
+  public LobbyLogin(final JFrame parentWindow) {
     this.parentWindow = parentWindow;
-    this.lobbyUri = lobbyUri;
-    this.lobbyLoginClient = LobbyLoginClient.newClient(lobbyUri);
+    this.lobbyLoginClient = LobbyLoginClient.newClient(ClientSetting.lobbyUri.getValueOrThrow());
   }
 
   /**
@@ -55,7 +54,6 @@ public class LobbyLogin {
               final boolean passwordChanged =
                   ChangePasswordPanel.doPasswordChange(
                       parentWindow,
-                      lobbyUri,
                       loginResult.getApiKey(),
                       ChangePasswordPanel.AllowCancelMode.DO_NOT_SHOW_CANCEL_BUTTON);
 
@@ -98,6 +96,7 @@ public class LobbyLogin {
               () -> lobbyLoginClient.login(panel.getUserName(), panel.getPassword()));
 
       if (loginResponse.getFailReason() == null) {
+        String lobbyWelcomeMessage = LiveServersFetcher.getLobbyMessage().orElse("");
         return Optional.of(
             LoginResult.builder()
                 .anonymousLogin(Strings.isNullOrEmpty(panel.getPassword()))
@@ -105,6 +104,7 @@ public class LobbyLogin {
                 .apiKey(ApiKey.of(loginResponse.getApiKey()))
                 .moderator(loginResponse.isModerator())
                 .passwordChangeRequired(loginResponse.isPasswordChangeRequired())
+                .loginMessage(lobbyWelcomeMessage)
                 .build());
       } else {
         showMessage("Login Failed", loginResponse.getFailReason());
@@ -149,6 +149,7 @@ public class LobbyLogin {
     final CreateAccountPanel.ReturnValue returnValue = createAccountPanel.show(parentWindow);
     switch (returnValue) {
       case OK:
+        String lobbyWelcomeMessage = LiveServersFetcher.getLobbyMessage().orElse("");
         return createAccount(createAccountPanel)
             .map(
                 lobbyLoginResponse ->
@@ -156,6 +157,7 @@ public class LobbyLogin {
                         .username(UserName.of(createAccountPanel.getUsername()))
                         .apiKey(ApiKey.of(lobbyLoginResponse.getApiKey()))
                         .passwordChangeRequired(lobbyLoginResponse.isPasswordChangeRequired())
+                        .loginMessage(lobbyWelcomeMessage)
                         .build());
       case CANCEL:
         return Optional.empty();
@@ -227,12 +229,13 @@ public class LobbyLogin {
           BackgroundTaskRunner.runInBackgroundAndReturn(
                   "Sending forgot password request...",
                   () ->
-                      ForgotPasswordClient.newClient(lobbyUri)
+                      ForgotPasswordClient.newClient(ClientSetting.lobbyUri.getValueOrThrow())
                           .sendForgotPasswordRequest(
                               ForgotPasswordRequest.builder()
                                   .username(panel.getUserName())
                                   .email(panel.getEmail())
                                   .build()),
+                  null,
                   IOException.class)
               .getResponseMessage();
       DialogBuilder.builder()

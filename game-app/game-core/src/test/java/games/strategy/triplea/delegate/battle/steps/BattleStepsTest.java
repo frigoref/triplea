@@ -34,7 +34,6 @@ import games.strategy.engine.data.GameData;
 import games.strategy.engine.data.GamePlayer;
 import games.strategy.engine.data.Territory;
 import games.strategy.engine.data.Unit;
-import games.strategy.engine.data.UnitCollection;
 import games.strategy.engine.data.UnitType;
 import games.strategy.triplea.Constants;
 import games.strategy.triplea.attachments.TechAttachment;
@@ -65,6 +64,10 @@ public class BattleStepsTest {
   @Mock GamePlayer defender;
   @Mock TechAttachment techAttachment;
 
+  public static MockGameData givenGameDataWithLenientProperties() {
+    return givenGameData().withLenientProperties();
+  }
+
   @BeforeEach
   public void givenPlayers() {
     lenient().when(attacker.getName()).thenReturn("mockAttacker");
@@ -79,8 +82,8 @@ public class BattleStepsTest {
 
   @Value
   public static class UnitAndAttachment {
-    private Unit unit;
-    private UnitAttachment unitAttachment;
+    Unit unit;
+    UnitAttachment unitAttachment;
   }
 
   public static UnitAndAttachment newUnitAndAttachment() {
@@ -91,6 +94,12 @@ public class BattleStepsTest {
     lenient().when(unitType.getAttachment(UNIT_ATTACHMENT_NAME)).thenReturn(unitAttachment);
     lenient().when(unit.getUnitAttachment()).thenReturn(unitAttachment);
     return new UnitAndAttachment(unit, unitAttachment);
+  }
+
+  public static UnitAndAttachment newSeaUnitAndAttachment() {
+    final var result = newUnitAndAttachment();
+    lenient().when(result.unitAttachment.getIsSea()).thenReturn(true);
+    return result;
   }
 
   public static Unit givenAnyUnit() {
@@ -109,15 +118,21 @@ public class BattleStepsTest {
     return unitAndAttachment.unit;
   }
 
-  public static Unit givenUnitFirstStrikeSuicideOnAttack() {
-    final UnitAndAttachment unitAndAttachment = newUnitAndAttachment();
+  public static Unit givenSeaUnitFirstStrike() {
+    final UnitAndAttachment unitAndAttachment = newSeaUnitAndAttachment();
+    lenient().when(unitAndAttachment.unitAttachment.getIsFirstStrike()).thenReturn(true);
+    return unitAndAttachment.unit;
+  }
+
+  public static Unit givenSeaUnitFirstStrikeSuicideOnAttack() {
+    final UnitAndAttachment unitAndAttachment = newSeaUnitAndAttachment();
     lenient().when(unitAndAttachment.unitAttachment.getIsFirstStrike()).thenReturn(true);
     lenient().when(unitAndAttachment.unitAttachment.getIsSuicideOnAttack()).thenReturn(true);
     return unitAndAttachment.unit;
   }
 
-  public static Unit givenUnitFirstStrikeSuicideOnDefense() {
-    final UnitAndAttachment unitAndAttachment = newUnitAndAttachment();
+  public static Unit givenSeaUnitFirstStrikeSuicideOnDefense() {
+    final UnitAndAttachment unitAndAttachment = newSeaUnitAndAttachment();
     lenient().when(unitAndAttachment.unitAttachment.getIsFirstStrike()).thenReturn(true);
     lenient().when(unitAndAttachment.unitAttachment.getIsSuicideOnDefense()).thenReturn(true);
     return unitAndAttachment.unit;
@@ -130,38 +145,46 @@ public class BattleStepsTest {
     return unitAndAttachment.unit;
   }
 
-  public static Unit givenUnitFirstStrikeAndEvadeAndCanNotBeTargetedBy(final UnitType otherType) {
-    final UnitAndAttachment unitAndAttachment = newUnitAndAttachment();
+  public static Unit givenSeaUnitFirstStrikeAndEvade() {
+    final UnitAndAttachment unitAndAttachment = newSeaUnitAndAttachment();
+    when(unitAndAttachment.unitAttachment.getIsFirstStrike()).thenReturn(true);
+    when(unitAndAttachment.unitAttachment.getCanEvade()).thenReturn(true);
+    return unitAndAttachment.unit;
+  }
+
+  public static Unit givenSeaUnitFirstStrikeAndEvadeAndCanNotBeTargetedBy(
+      final UnitType otherType) {
+    final UnitAndAttachment unitAndAttachment = newSeaUnitAndAttachment();
     when(unitAndAttachment.unitAttachment.getIsFirstStrike()).thenReturn(true);
     when(unitAndAttachment.unitAttachment.getCanEvade()).thenReturn(true);
     when(unitAndAttachment.unitAttachment.getCanNotBeTargetedBy()).thenReturn(Set.of(otherType));
     return unitAndAttachment.unit;
   }
 
-  public static Unit givenUnitCanEvadeAndCanNotBeTargetedByRandomUnit() {
-    final UnitAndAttachment unitAndAttachment = newUnitAndAttachment();
+  public static Unit givenSeaUnitCanEvadeAndCanNotBeTargetedByRandomUnit() {
+    final UnitAndAttachment unitAndAttachment = newSeaUnitAndAttachment();
     when(unitAndAttachment.unitAttachment.getCanEvade()).thenReturn(true);
     when(unitAndAttachment.unitAttachment.getCanNotBeTargetedBy())
         .thenReturn(Set.of(mock(UnitType.class)));
     return unitAndAttachment.unit;
   }
 
-  public static Unit givenUnitCanNotBeTargetedBy(final UnitType otherType) {
-    final UnitAndAttachment unitAndAttachment = newUnitAndAttachment();
+  public static Unit givenSeaUnitCanNotBeTargetedBy(final UnitType otherType) {
+    final UnitAndAttachment unitAndAttachment = newSeaUnitAndAttachment();
     when(unitAndAttachment.unitAttachment.getCanNotBeTargetedBy()).thenReturn(Set.of(otherType));
     return unitAndAttachment.unit;
   }
 
   public static Unit givenUnitDestroyer() {
-    final UnitAndAttachment unitAndAttachment = newUnitAndAttachment();
+    final UnitAndAttachment unitAndAttachment = newSeaUnitAndAttachment();
     lenient().when(unitAndAttachment.unitAttachment.getIsDestroyer()).thenReturn(true);
+    lenient().when(unitAndAttachment.unitAttachment.getIsSea()).thenReturn(true);
     return unitAndAttachment.unit;
   }
 
   public static Unit givenUnitSeaTransport() {
-    final UnitAndAttachment unitAndAttachment = newUnitAndAttachment();
-    when(unitAndAttachment.unitAttachment.getTransportCapacity()).thenReturn(2);
-    when(unitAndAttachment.unitAttachment.getIsSea()).thenReturn(true);
+    final UnitAndAttachment unitAndAttachment = newSeaUnitAndAttachment();
+    lenient().when(unitAndAttachment.unitAttachment.getTransportCapacity()).thenReturn(2);
     return unitAndAttachment.unit;
   }
 
@@ -211,9 +234,7 @@ public class BattleStepsTest {
   }
 
   public static Unit givenUnitIsSea() {
-    final UnitAndAttachment unitAndAttachment = newUnitAndAttachment();
-    when(unitAndAttachment.unitAttachment.getIsSea()).thenReturn(true);
-    return unitAndAttachment.unit;
+    return newSeaUnitAndAttachment().unit;
   }
 
   public static Unit givenUnitWasAmphibious() {
@@ -287,7 +308,10 @@ public class BattleStepsTest {
         .battleActions(battleActions)
         .battleState(battleState)
         .build()
-        .get();
+        .get()
+        .stream()
+        .map(BattleStep.StepDetails::getName)
+        .collect(Collectors.toList());
   }
 
   @Test
@@ -315,11 +339,7 @@ public class BattleStepsTest {
         givenBattleSteps(
             givenBattleStateBuilder()
                 .gameData(
-                    givenGameData()
-                        .withDefendingSuicideAndMunitionUnitsDoNotFire(false)
-                        .withSubRetreatBeforeBattle(false)
-                        .withAlliedAirIndependent(true)
-                        .build())
+                    givenGameDataWithLenientProperties().withAlliedAirIndependent(true).build())
                 .attacker(attacker)
                 .defender(defender)
                 .attackingUnits(List.of(unit1))
@@ -342,13 +362,7 @@ public class BattleStepsTest {
         givenBattleSteps(
             givenBattleStateBuilder()
                 .gameData(
-                    givenGameData()
-                        .withDefendingSuicideAndMunitionUnitsDoNotFire(false)
-                        .withSubRetreatBeforeBattle(false)
-                        .withNavalBombardCasualtiesReturnFire(false)
-                        .withCaptureUnitsOnEnteringTerritory(false)
-                        .withAlliedAirIndependent(true)
-                        .build())
+                    givenGameDataWithLenientProperties().withAlliedAirIndependent(true).build())
                 .attacker(attacker)
                 .defender(defender)
                 .attackingUnits(List.of(unit1))
@@ -375,11 +389,7 @@ public class BattleStepsTest {
         givenBattleSteps(
             givenBattleStateBuilder()
                 .gameData(
-                    givenGameData()
-                        .withDefendingSuicideAndMunitionUnitsDoNotFire(false)
-                        .withSubRetreatBeforeBattle(false)
-                        .withAlliedAirIndependent(true)
-                        .build())
+                    givenGameDataWithLenientProperties().withAlliedAirIndependent(true).build())
                 .attacker(attacker)
                 .defender(defender)
                 .battleRound(2)
@@ -395,18 +405,13 @@ public class BattleStepsTest {
   @Test
   @DisplayName("Verify impossible sea battle with bombarding will not add a bombarding step")
   void impossibleSeaBattleWithBombarding() {
-    final Unit unit1 = givenAnyUnit();
-    final Unit unit2 = givenAnyUnit();
+    final Unit unit1 = givenUnitIsSea();
+    final Unit unit2 = givenUnitIsSea();
     final List<String> steps =
         givenBattleSteps(
             givenBattleStateBuilder()
                 .gameData(
-                    givenGameData()
-                        .withDefendingSuicideAndMunitionUnitsDoNotFire(false)
-                        .withSubRetreatBeforeBattle(false)
-                        .withTransportCasualtiesRestricted(false)
-                        .withAlliedAirIndependent(true)
-                        .build())
+                    givenGameDataWithLenientProperties().withAlliedAirIndependent(true).build())
                 .battleRound(1)
                 .attacker(attacker)
                 .defender(defender)
@@ -462,11 +467,7 @@ public class BattleStepsTest {
         givenBattleSteps(
             givenBattleStateBuilder()
                 .gameData(
-                    givenGameData()
-                        .withDefendingSuicideAndMunitionUnitsDoNotFire(false)
-                        .withSubRetreatBeforeBattle(false)
-                        .withAlliedAirIndependent(true)
-                        .build())
+                    givenGameDataWithLenientProperties().withAlliedAirIndependent(true).build())
                 .battleRound(1)
                 .attacker(attacker)
                 .defender(defender)
@@ -488,11 +489,7 @@ public class BattleStepsTest {
         givenBattleSteps(
             givenBattleStateBuilder()
                 .gameData(
-                    givenGameData()
-                        .withDefendingSuicideAndMunitionUnitsDoNotFire(false)
-                        .withSubRetreatBeforeBattle(false)
-                        .withAlliedAirIndependent(true)
-                        .build())
+                    givenGameDataWithLenientProperties().withAlliedAirIndependent(true).build())
                 .attacker(attacker)
                 .defender(defender)
                 .battleRound(2)
@@ -538,18 +535,13 @@ public class BattleStepsTest {
   @Test
   @DisplayName("Verify impossible sea battle with paratroopers will not add a paratrooper step")
   void impossibleSeaBattleWithParatroopers() {
-    final Unit unit1 = givenAnyUnit();
-    final Unit unit2 = givenAnyUnit();
+    final Unit unit1 = givenUnitIsSea();
+    final Unit unit2 = givenUnitIsSea();
     final List<String> steps =
         givenBattleSteps(
             givenBattleStateBuilder()
                 .gameData(
-                    givenGameData()
-                        .withDefendingSuicideAndMunitionUnitsDoNotFire(false)
-                        .withSubRetreatBeforeBattle(false)
-                        .withTransportCasualtiesRestricted(false)
-                        .withAlliedAirIndependent(true)
-                        .build())
+                    givenGameDataWithLenientProperties().withAlliedAirIndependent(true).build())
                 .battleRound(1)
                 .attacker(attacker)
                 .defender(defender)
@@ -681,8 +673,7 @@ public class BattleStepsTest {
         givenBattleSteps(
             givenBattleStateBuilder()
                 .gameData(
-                    givenGameData()
-                        .withDefendingSuicideAndMunitionUnitsDoNotFire(false)
+                    givenGameDataWithLenientProperties()
                         .withSubRetreatBeforeBattle(true)
                         .withSubmersibleSubs(true)
                         .withAlliedAirIndependent(true)
@@ -710,8 +701,7 @@ public class BattleStepsTest {
         givenBattleSteps(
             givenBattleStateBuilder()
                 .gameData(
-                    givenGameData()
-                        .withDefendingSuicideAndMunitionUnitsDoNotFire(false)
+                    givenGameDataWithLenientProperties()
                         .withSubRetreatBeforeBattle(true)
                         .withSubmersibleSubs(true)
                         .withAlliedAirIndependent(true)
@@ -739,11 +729,7 @@ public class BattleStepsTest {
         givenBattleSteps(
             givenBattleStateBuilder()
                 .gameData(
-                    givenGameData()
-                        .withDefendingSuicideAndMunitionUnitsDoNotFire(false)
-                        .withSubRetreatBeforeBattle(false)
-                        .withAlliedAirIndependent(true)
-                        .build())
+                    givenGameDataWithLenientProperties().withAlliedAirIndependent(true).build())
                 .attacker(attacker)
                 .defender(defender)
                 .attackingUnits(List.of(unit1))
@@ -759,18 +745,16 @@ public class BattleStepsTest {
       "Verify defending firstStrike submerge before battle "
           + "if SUB_RETREAT_BEFORE_BATTLE and SUBMERSIBLE_SUBS are true")
   void defendingFirstStrikeSubmergeBeforeBattleIfSubmersibleSubsAndRetreatBeforeBattle() {
-    final Unit unit1 = givenAnyUnit();
-    final Unit unit2 = givenUnitFirstStrikeAndEvade();
+    final Unit unit1 = givenUnitIsSea();
+    final Unit unit2 = givenSeaUnitFirstStrikeAndEvade();
 
     final List<String> steps =
         givenBattleSteps(
             givenBattleStateBuilder()
                 .gameData(
-                    givenGameData()
+                    givenGameDataWithLenientProperties()
                         .withSubRetreatBeforeBattle(true)
                         .withSubmersibleSubs(true)
-                        .withDefendingSuicideAndMunitionUnitsDoNotFire(false)
-                        .withWW2V2(false)
                         .withDefendingSubsSneakAttack(true)
                         .withAlliedAirIndependent(true)
                         .build())
@@ -778,7 +762,7 @@ public class BattleStepsTest {
                 .defender(defender)
                 .attackingUnits(List.of(unit1))
                 .defendingUnits(List.of(unit2))
-                .battleSite(battleSite)
+                .battleSite(givenSeaBattleSite())
                 .build());
 
     assertThat(
@@ -796,15 +780,13 @@ public class BattleStepsTest {
   @DisplayName("Verify unescorted attacking transports are removed if casualties are restricted")
   void unescortedAttackingTransportsAreRemovedWhenCasualtiesAreRestricted() {
     final Unit unit1 = givenUnitSeaTransport();
-    final Unit unit2 = givenAnyUnit();
+    final Unit unit2 = givenUnitIsSea();
 
     final List<String> steps =
         givenBattleSteps(
             givenBattleStateBuilder()
                 .gameData(
-                    givenGameData()
-                        .withDefendingSuicideAndMunitionUnitsDoNotFire(false)
-                        .withSubRetreatBeforeBattle(false)
+                    givenGameDataWithLenientProperties()
                         .withTransportCasualtiesRestricted(true)
                         .withAlliedAirIndependent(true)
                         .build())
@@ -823,19 +805,14 @@ public class BattleStepsTest {
   @DisplayName(
       "Verify unescorted attacking transports are not removed if casualties are not restricted")
   void unescortedAttackingTransportsAreNotRemovedWhenCasualtiesAreNotRestricted() {
-    final UnitAndAttachment unitAndAttachment = newUnitAndAttachment();
+    final UnitAndAttachment unitAndAttachment = newSeaUnitAndAttachment();
     final Unit unit1 = unitAndAttachment.unit;
-    final Unit unit2 = givenAnyUnit();
+    final Unit unit2 = givenUnitIsSea();
     final List<String> steps =
         givenBattleSteps(
             givenBattleStateBuilder()
                 .gameData(
-                    givenGameData()
-                        .withDefendingSuicideAndMunitionUnitsDoNotFire(false)
-                        .withSubRetreatBeforeBattle(false)
-                        .withTransportCasualtiesRestricted(false)
-                        .withAlliedAirIndependent(true)
-                        .build())
+                    givenGameDataWithLenientProperties().withAlliedAirIndependent(true).build())
                 .attacker(attacker)
                 .defender(defender)
                 .attackingUnits(List.of(unit1))
@@ -850,16 +827,14 @@ public class BattleStepsTest {
   @Test
   @DisplayName("Verify unescorted defending transports are removed if casualties are restricted")
   void unescortedDefendingTransportsAreRemovedWhenCasualtiesAreRestricted() {
-    final Unit unit1 = givenAnyUnit();
+    final Unit unit1 = givenUnitIsSea();
     final Unit unit2 = givenUnitSeaTransport();
 
     final List<String> steps =
         givenBattleSteps(
             givenBattleStateBuilder()
                 .gameData(
-                    givenGameData()
-                        .withDefendingSuicideAndMunitionUnitsDoNotFire(false)
-                        .withSubRetreatBeforeBattle(false)
+                    givenGameDataWithLenientProperties()
                         .withTransportCasualtiesRestricted(true)
                         .withAlliedAirIndependent(true)
                         .build())
@@ -878,20 +853,15 @@ public class BattleStepsTest {
   @DisplayName(
       "Verify unescorted defending transports are removed if casualties are not restricted")
   void unescortedDefendingTransportsAreNotRemovedWhenCasualtiesAreNotRestricted() {
-    final Unit unit1 = givenAnyUnit();
-    final UnitAndAttachment unitAndAttachment = newUnitAndAttachment();
+    final Unit unit1 = givenUnitIsSea();
+    final UnitAndAttachment unitAndAttachment = newSeaUnitAndAttachment();
     final Unit unit2 = unitAndAttachment.unit;
 
     final List<String> steps =
         givenBattleSteps(
             givenBattleStateBuilder()
                 .gameData(
-                    givenGameData()
-                        .withDefendingSuicideAndMunitionUnitsDoNotFire(false)
-                        .withSubRetreatBeforeBattle(false)
-                        .withTransportCasualtiesRestricted(false)
-                        .withAlliedAirIndependent(true)
-                        .build())
+                    givenGameDataWithLenientProperties().withAlliedAirIndependent(true).build())
                 .attacker(attacker)
                 .defender(defender)
                 .attackingUnits(List.of(unit1))
@@ -908,19 +878,14 @@ public class BattleStepsTest {
       "Verify basic attacker firstStrike "
           + "(no other attackers, no special defenders, all options false)")
   void attackingFirstStrikeBasic() {
-    final Unit unit1 = givenUnitFirstStrikeAndEvade();
+    final Unit unit1 = givenSeaUnitFirstStrikeAndEvade();
     final Unit unit2 = givenAnyUnit();
 
     final List<String> steps =
         givenBattleSteps(
             givenBattleStateBuilder()
                 .gameData(
-                    givenGameData()
-                        .withWW2V2(false)
-                        .withDefendingSuicideAndMunitionUnitsDoNotFire(false)
-                        .withSubRetreatBeforeBattle(false)
-                        .withAlliedAirIndependent(true)
-                        .build())
+                    givenGameDataWithLenientProperties().withAlliedAirIndependent(true).build())
                 .attacker(attacker)
                 .defender(defender)
                 .attackingUnits(List.of(unit1))
@@ -941,24 +906,19 @@ public class BattleStepsTest {
   @Test
   @DisplayName("Verify attacker firstStrike with destroyers")
   void attackingFirstStrikeWithDestroyers() {
-    final Unit unit1 = givenUnitFirstStrike();
+    final Unit unit1 = givenSeaUnitFirstStrike();
     final Unit unit2 = givenUnitDestroyer();
 
     final List<String> steps =
         givenBattleSteps(
             givenBattleStateBuilder()
                 .gameData(
-                    givenGameData()
-                        .withWW2V2(false)
-                        .withDefendingSuicideAndMunitionUnitsDoNotFire(false)
-                        .withSubRetreatBeforeBattle(false)
-                        .withAlliedAirIndependent(true)
-                        .build())
+                    givenGameDataWithLenientProperties().withAlliedAirIndependent(true).build())
                 .attacker(attacker)
                 .defender(defender)
                 .attackingUnits(List.of(unit1))
                 .defendingUnits(List.of(unit2))
-                .battleSite(battleSite)
+                .battleSite(givenSeaBattleSite())
                 .build());
 
     assertThat(
@@ -982,13 +942,7 @@ public class BattleStepsTest {
         givenBattleSteps(
             givenBattleStateBuilder()
                 .gameData(
-                    givenGameData()
-                        .withDefendingSuicideAndMunitionUnitsDoNotFire(false)
-                        .withWW2V2(false)
-                        .withDefendingSubsSneakAttack(false)
-                        .withSubRetreatBeforeBattle(false)
-                        .withAlliedAirIndependent(true)
-                        .build())
+                    givenGameDataWithLenientProperties().withAlliedAirIndependent(true).build())
                 .attacker(attacker)
                 .defender(defender)
                 .attackingUnits(List.of(unit1))
@@ -1008,26 +962,22 @@ public class BattleStepsTest {
   @Test
   @DisplayName("Verify defender firstStrike with DEFENDING_SUBS_SNEAK_ATTACK true")
   void defendingFirstStrikeWithSneakAttackAllowed() {
-    final Unit unit1 = givenAnyUnit();
-    final Unit unit2 = givenUnitFirstStrikeAndEvade();
+    final Unit unit1 = givenUnitIsSea();
+    final Unit unit2 = givenSeaUnitFirstStrikeAndEvade();
 
     final List<String> steps =
         givenBattleSteps(
             givenBattleStateBuilder()
                 .gameData(
-                    givenGameData()
-                        .withSubRetreatBeforeBattle(false)
-                        .withDefendingSuicideAndMunitionUnitsDoNotFire(false)
+                    givenGameDataWithLenientProperties()
                         .withAlliedAirIndependent(true)
-                        .withTransportCasualtiesRestricted(false)
-                        .withWW2V2(false)
                         .withDefendingSubsSneakAttack(true)
                         .build())
                 .attacker(attacker)
                 .defender(defender)
                 .attackingUnits(List.of(unit1))
                 .defendingUnits(List.of(unit2))
-                .battleSite(battleSite)
+                .battleSite(givenSeaBattleSite())
                 .build());
 
     assertThat(
@@ -1050,11 +1000,8 @@ public class BattleStepsTest {
         givenBattleSteps(
             givenBattleStateBuilder()
                 .gameData(
-                    givenGameData()
-                        .withSubRetreatBeforeBattle(false)
-                        .withDefendingSuicideAndMunitionUnitsDoNotFire(false)
+                    givenGameDataWithLenientProperties()
                         .withAlliedAirIndependent(true)
-                        .withTransportCasualtiesRestricted(false)
                         .withWW2V2(true)
                         .build())
                 .attacker(attacker)
@@ -1078,24 +1025,21 @@ public class BattleStepsTest {
   @DisplayName("Verify defender firstStrike with WW2v2 true and attacker destroyers")
   void defendingFirstStrikeWithWW2v2AndDestroyers() {
     final Unit unit1 = givenUnitDestroyer();
-    final Unit unit2 = givenUnitFirstStrikeAndEvade();
+    final Unit unit2 = givenSeaUnitFirstStrikeAndEvade();
 
     final List<String> steps =
         givenBattleSteps(
             givenBattleStateBuilder()
                 .gameData(
-                    givenGameData()
-                        .withSubRetreatBeforeBattle(false)
-                        .withDefendingSuicideAndMunitionUnitsDoNotFire(false)
+                    givenGameDataWithLenientProperties()
                         .withAlliedAirIndependent(true)
-                        .withTransportCasualtiesRestricted(false)
                         .withWW2V2(true)
                         .build())
                 .attacker(attacker)
                 .defender(defender)
                 .attackingUnits(List.of(unit1))
                 .defendingUnits(List.of(unit2))
-                .battleSite(battleSite)
+                .battleSite(givenSeaBattleSite())
                 .build());
 
     assertThat(
@@ -1119,13 +1063,7 @@ public class BattleStepsTest {
         givenBattleSteps(
             givenBattleStateBuilder()
                 .gameData(
-                    givenGameData()
-                        .withWW2V2(false)
-                        .withDefendingSuicideAndMunitionUnitsDoNotFire(false)
-                        .withDefendingSubsSneakAttack(false)
-                        .withSubRetreatBeforeBattle(false)
-                        .withAlliedAirIndependent(true)
-                        .build())
+                    givenGameDataWithLenientProperties().withAlliedAirIndependent(true).build())
                 .attacker(attacker)
                 .defender(defender)
                 .attackingUnits(List.of(unit1))
@@ -1146,18 +1084,14 @@ public class BattleStepsTest {
   @Test
   @DisplayName("Verify attacking/defender firstStrikes with DEFENDING_SUBS_SNEAK_ATTACK true")
   void attackingDefendingFirstStrikeWithSneakAttackAllowed() {
-    final Unit unit1 = givenUnitFirstStrikeAndEvade();
-    final Unit unit2 = givenUnitFirstStrikeAndEvade();
+    final Unit unit1 = givenSeaUnitFirstStrikeAndEvade();
+    final Unit unit2 = givenSeaUnitFirstStrikeAndEvade();
 
     final List<String> steps =
         givenBattleSteps(
             givenBattleStateBuilder()
                 .gameData(
-                    givenGameData()
-                        .withDefendingSuicideAndMunitionUnitsDoNotFire(false)
-                        .withSubRetreatBeforeBattle(false)
-                        .withTransportCasualtiesRestricted(false)
-                        .withWW2V2(false)
+                    givenGameDataWithLenientProperties()
                         .withDefendingSubsSneakAttack(true)
                         .withAlliedAirIndependent(true)
                         .build())
@@ -1180,17 +1114,14 @@ public class BattleStepsTest {
   @Test
   @DisplayName("Verify attacking/defender firstStrikes with WW2v2 true")
   void attackingDefendingFirstStrikeWithWW2v2() {
-    final Unit unit1 = givenUnitFirstStrikeAndEvade();
-    final Unit unit2 = givenUnitFirstStrikeAndEvade();
+    final Unit unit1 = givenSeaUnitFirstStrikeAndEvade();
+    final Unit unit2 = givenSeaUnitFirstStrikeAndEvade();
 
     final List<String> steps =
         givenBattleSteps(
             givenBattleStateBuilder()
                 .gameData(
-                    givenGameData()
-                        .withDefendingSuicideAndMunitionUnitsDoNotFire(false)
-                        .withSubRetreatBeforeBattle(false)
-                        .withTransportCasualtiesRestricted(false)
+                    givenGameDataWithLenientProperties()
                         .withWW2V2(true)
                         .withAlliedAirIndependent(true)
                         .build())
@@ -1214,8 +1145,8 @@ public class BattleStepsTest {
   @DisplayName(
       "Verify attacking/defender firstStrikes with WW2v2 true and attacker/defender destroyers")
   void attackingDefendingFirstStrikeWithWW2v2AndDestroyers() {
-    final Unit unit1 = givenUnitFirstStrike();
-    final Unit unit2 = givenUnitFirstStrikeAndEvade();
+    final Unit unit1 = givenSeaUnitFirstStrike();
+    final Unit unit2 = givenSeaUnitFirstStrikeAndEvade();
     final Unit unit3 = givenUnitDestroyer();
     final Unit unit4 = givenUnitDestroyer();
 
@@ -1223,10 +1154,7 @@ public class BattleStepsTest {
         givenBattleSteps(
             givenBattleStateBuilder()
                 .gameData(
-                    givenGameData()
-                        .withDefendingSuicideAndMunitionUnitsDoNotFire(false)
-                        .withSubRetreatBeforeBattle(false)
-                        .withTransportCasualtiesRestricted(false)
+                    givenGameDataWithLenientProperties()
                         .withWW2V2(true)
                         .withAlliedAirIndependent(true)
                         .build())
@@ -1253,19 +1181,15 @@ public class BattleStepsTest {
       "Verify attacking/defender firstStrikes with "
           + "DEFENDING_SUBS_SNEAK_ATTACK true and defender destroyers")
   void attackingDefendingFirstStrikeWithSneakAttackAllowedAndDefendingDestroyers() {
-    final Unit unit1 = givenUnitFirstStrike();
-    final Unit unit2 = givenUnitFirstStrikeAndEvade();
+    final Unit unit1 = givenSeaUnitFirstStrike();
+    final Unit unit2 = givenSeaUnitFirstStrikeAndEvade();
     final Unit unit3 = givenUnitDestroyer();
 
     final List<String> steps =
         givenBattleSteps(
             givenBattleStateBuilder()
                 .gameData(
-                    givenGameData()
-                        .withDefendingSuicideAndMunitionUnitsDoNotFire(false)
-                        .withSubRetreatBeforeBattle(false)
-                        .withTransportCasualtiesRestricted(false)
-                        .withWW2V2(false)
+                    givenGameDataWithLenientProperties()
                         .withDefendingSubsSneakAttack(true)
                         .withAlliedAirIndependent(true)
                         .build())
@@ -1290,18 +1214,15 @@ public class BattleStepsTest {
   @Test
   @DisplayName("Verify attacking/defender firstStrikes with WW2v2 true and defender destroyers")
   void attackingDefendingFirstStrikeWithWW2v2AndDefendingDestroyers() {
-    final Unit unit1 = givenUnitFirstStrike();
-    final Unit unit2 = givenUnitFirstStrikeAndEvade();
+    final Unit unit1 = givenSeaUnitFirstStrike();
+    final Unit unit2 = givenSeaUnitFirstStrikeAndEvade();
     final Unit unit3 = givenUnitDestroyer();
 
     final List<String> steps =
         givenBattleSteps(
             givenBattleStateBuilder()
                 .gameData(
-                    givenGameData()
-                        .withDefendingSuicideAndMunitionUnitsDoNotFire(false)
-                        .withSubRetreatBeforeBattle(false)
-                        .withTransportCasualtiesRestricted(false)
+                    givenGameDataWithLenientProperties()
                         .withWW2V2(true)
                         .withAlliedAirIndependent(true)
                         .build())
@@ -1326,18 +1247,15 @@ public class BattleStepsTest {
   @Test
   @DisplayName("Verify attacking/defender firstStrikes with WW2v2 true and attacking destroyers")
   void attackingDefendingFirstStrikeWithWW2v2AndAttackingDestroyers() {
-    final Unit unit1 = givenUnitFirstStrikeAndEvade();
-    final Unit unit2 = givenUnitFirstStrikeAndEvade();
+    final Unit unit1 = givenSeaUnitFirstStrikeAndEvade();
+    final Unit unit2 = givenSeaUnitFirstStrikeAndEvade();
     final Unit unit3 = givenUnitDestroyer();
 
     final List<String> steps =
         givenBattleSteps(
             givenBattleStateBuilder()
                 .gameData(
-                    givenGameData()
-                        .withDefendingSuicideAndMunitionUnitsDoNotFire(false)
-                        .withSubRetreatBeforeBattle(false)
-                        .withTransportCasualtiesRestricted(false)
+                    givenGameDataWithLenientProperties()
                         .withWW2V2(true)
                         .withAlliedAirIndependent(true)
                         .build())
@@ -1363,16 +1281,13 @@ public class BattleStepsTest {
   @DisplayName("Verify attacking firstStrikes against air")
   void attackingFirstStrikeVsAir() {
     final Unit unit2 = givenUnitIsAir();
-    final Unit unit1 = givenUnitFirstStrikeAndEvadeAndCanNotBeTargetedBy(unit2.getType());
+    final Unit unit1 = givenSeaUnitFirstStrikeAndEvadeAndCanNotBeTargetedBy(unit2.getType());
 
     final List<String> steps =
         givenBattleSteps(
             givenBattleStateBuilder()
                 .gameData(
-                    givenGameData()
-                        .withDefendingSuicideAndMunitionUnitsDoNotFire(false)
-                        .withSubRetreatBeforeBattle(false)
-                        .withTransportCasualtiesRestricted(false)
+                    givenGameDataWithLenientProperties()
                         .withWW2V2(true)
                         .withAlliedAirIndependent(true)
                         .build())
@@ -1397,18 +1312,15 @@ public class BattleStepsTest {
   @DisplayName("Verify attacking firstStrikes against air with other units on both sides")
   void attackingFirstStrikeVsAirWithOtherUnits() {
     final Unit unit2 = givenUnitIsAir();
-    final Unit unit1 = givenUnitFirstStrikeAndEvadeAndCanNotBeTargetedBy(unit2.getType());
-    final Unit unit3 = givenAnyUnit();
-    final Unit unit4 = givenAnyUnit();
+    final Unit unit1 = givenSeaUnitFirstStrikeAndEvadeAndCanNotBeTargetedBy(unit2.getType());
+    final Unit unit3 = givenUnitIsSea();
+    final Unit unit4 = givenUnitIsSea();
 
     final List<String> steps =
         givenBattleSteps(
             givenBattleStateBuilder()
                 .gameData(
-                    givenGameData()
-                        .withDefendingSuicideAndMunitionUnitsDoNotFire(false)
-                        .withSubRetreatBeforeBattle(false)
-                        .withTransportCasualtiesRestricted(false)
+                    givenGameDataWithLenientProperties()
                         .withWW2V2(true)
                         .withAlliedAirIndependent(true)
                         .build())
@@ -1435,17 +1347,14 @@ public class BattleStepsTest {
   @DisplayName("Verify attacking firstStrikes against air with destroyer")
   void attackingFirstStrikeVsAirAndDestroyer() {
     final Unit unit2 = givenUnitIsAir();
-    final Unit unit1 = givenUnitFirstStrike();
+    final Unit unit1 = givenSeaUnitFirstStrike();
     final Unit unit3 = givenUnitDestroyer();
 
     final List<String> steps =
         givenBattleSteps(
             givenBattleStateBuilder()
                 .gameData(
-                    givenGameData()
-                        .withDefendingSuicideAndMunitionUnitsDoNotFire(false)
-                        .withSubRetreatBeforeBattle(false)
-                        .withTransportCasualtiesRestricted(false)
+                    givenGameDataWithLenientProperties()
                         .withWW2V2(true)
                         .withAlliedAirIndependent(true)
                         .build())
@@ -1469,16 +1378,13 @@ public class BattleStepsTest {
   @DisplayName("Verify defending firstStrikes against air")
   void defendingFirstStrikeVsAir() {
     final Unit unit1 = givenUnitIsAir();
-    final Unit unit2 = givenUnitFirstStrikeAndEvadeAndCanNotBeTargetedBy(unit1.getType());
+    final Unit unit2 = givenSeaUnitFirstStrikeAndEvadeAndCanNotBeTargetedBy(unit1.getType());
 
     final List<String> steps =
         givenBattleSteps(
             givenBattleStateBuilder()
                 .gameData(
-                    givenGameData()
-                        .withDefendingSuicideAndMunitionUnitsDoNotFire(false)
-                        .withSubRetreatBeforeBattle(false)
-                        .withTransportCasualtiesRestricted(false)
+                    givenGameDataWithLenientProperties()
                         .withWW2V2(true)
                         .withAlliedAirIndependent(true)
                         .build())
@@ -1503,17 +1409,14 @@ public class BattleStepsTest {
   @DisplayName("Verify defending firstStrikes against air with destroyer")
   void defendingFirstStrikeVsAirAndDestroyer() {
     final Unit unit1 = givenUnitIsAir();
-    final Unit unit2 = givenUnitFirstStrikeAndEvade();
+    final Unit unit2 = givenSeaUnitFirstStrikeAndEvade();
     final Unit unit3 = givenUnitDestroyer();
 
     final List<String> steps =
         givenBattleSteps(
             givenBattleStateBuilder()
                 .gameData(
-                    givenGameData()
-                        .withDefendingSuicideAndMunitionUnitsDoNotFire(false)
-                        .withSubRetreatBeforeBattle(false)
-                        .withTransportCasualtiesRestricted(false)
+                    givenGameDataWithLenientProperties()
                         .withWW2V2(true)
                         .withAlliedAirIndependent(true)
                         .build())
@@ -1537,18 +1440,15 @@ public class BattleStepsTest {
   @DisplayName("Verify defending firstStrikes against air with other units on both sides")
   void defendingFirstStrikeVsAirWithOtherUnits() {
     final Unit unit2 = givenUnitIsAir();
-    final Unit unit1 = givenUnitFirstStrikeAndEvadeAndCanNotBeTargetedBy(unit2.getType());
-    final Unit unit3 = givenAnyUnit();
-    final Unit unit4 = givenAnyUnit();
+    final Unit unit1 = givenSeaUnitFirstStrikeAndEvadeAndCanNotBeTargetedBy(unit2.getType());
+    final Unit unit3 = givenUnitIsSea();
+    final Unit unit4 = givenUnitIsSea();
 
     final List<String> steps =
         givenBattleSteps(
             givenBattleStateBuilder()
                 .gameData(
-                    givenGameData()
-                        .withDefendingSuicideAndMunitionUnitsDoNotFire(false)
-                        .withSubRetreatBeforeBattle(false)
-                        .withTransportCasualtiesRestricted(false)
+                    givenGameDataWithLenientProperties()
                         .withWW2V2(true)
                         .withAlliedAirIndependent(true)
                         .build())
@@ -1574,26 +1474,22 @@ public class BattleStepsTest {
   @Test
   @DisplayName("Verify attacking firstStrike can submerge if SUBMERSIBLE_SUBS is true")
   void attackingFirstStrikeCanSubmergeIfSubmersibleSubs() {
-    final Unit unit1 = givenUnitFirstStrikeAndEvade();
-    final Unit unit2 = givenAnyUnit();
+    final Unit unit1 = givenSeaUnitFirstStrikeAndEvade();
+    final Unit unit2 = givenUnitIsSea();
 
     final List<String> steps =
         givenBattleSteps(
             givenBattleStateBuilder()
                 .gameData(
-                    givenGameData()
-                        .withSubRetreatBeforeBattle(false)
-                        .withDefendingSuicideAndMunitionUnitsDoNotFire(false)
+                    givenGameDataWithLenientProperties()
                         .withAlliedAirIndependent(true)
-                        .withTransportCasualtiesRestricted(false)
-                        .withWW2V2(false)
                         .withSubmersibleSubs(true)
                         .build())
                 .attacker(attacker)
                 .defender(defender)
                 .attackingUnits(List.of(unit1))
                 .defendingUnits(List.of(unit2))
-                .battleSite(battleSite)
+                .battleSite(givenSeaBattleSite())
                 .build());
 
     assertThat(
@@ -1609,19 +1505,15 @@ public class BattleStepsTest {
   @Test
   @DisplayName("Verify defending firstStrike can submerge if SUBMERSIBLE_SUBS is true")
   void defendingFirstStrikeCanSubmergeIfSubmersibleSubs() {
-    final Unit unit1 = givenAnyUnit();
-    final Unit unit2 = givenUnitFirstStrikeAndEvade();
+    final Unit unit1 = givenUnitIsSea();
+    final Unit unit2 = givenSeaUnitFirstStrikeAndEvade();
 
     final List<String> steps =
         givenBattleSteps(
             givenBattleStateBuilder()
                 .gameData(
-                    givenGameData()
-                        .withSubRetreatBeforeBattle(false)
-                        .withDefendingSuicideAndMunitionUnitsDoNotFire(false)
+                    givenGameDataWithLenientProperties()
                         .withAlliedAirIndependent(true)
-                        .withTransportCasualtiesRestricted(false)
-                        .withWW2V2(false)
                         .withDefendingSubsSneakAttack(true)
                         .withSubmersibleSubs(true)
                         .build())
@@ -1629,7 +1521,7 @@ public class BattleStepsTest {
                 .defender(defender)
                 .attackingUnits(List.of(unit1))
                 .defendingUnits(List.of(unit2))
-                .battleSite(battleSite)
+                .battleSite(givenSeaBattleSite())
                 .build());
 
     assertThat(
@@ -1647,25 +1539,21 @@ public class BattleStepsTest {
       "Verify defending firstStrike can submerge if SUBMERSIBLE_SUBS is true even with destroyers")
   void defendingFirstStrikeCanSubmergeIfSubmersibleSubsAndDestroyers() {
     final Unit unit1 = givenUnitDestroyer();
-    final Unit unit2 = givenUnitFirstStrikeAndEvade();
+    final Unit unit2 = givenSeaUnitFirstStrikeAndEvade();
 
     final List<String> steps =
         givenBattleSteps(
             givenBattleStateBuilder()
                 .gameData(
-                    givenGameData()
-                        .withSubRetreatBeforeBattle(false)
-                        .withDefendingSuicideAndMunitionUnitsDoNotFire(false)
+                    givenGameDataWithLenientProperties()
                         .withAlliedAirIndependent(true)
-                        .withTransportCasualtiesRestricted(false)
-                        .withWW2V2(false)
                         .withSubmersibleSubs(true)
                         .build())
                 .attacker(attacker)
                 .defender(defender)
                 .attackingUnits(List.of(unit1))
                 .defendingUnits(List.of(unit2))
-                .battleSite(battleSite)
+                .battleSite(givenSeaBattleSite())
                 .build());
 
     assertThat(
@@ -1680,19 +1568,14 @@ public class BattleStepsTest {
   @Test
   @DisplayName("Verify attacking firstStrike can withdraw when SUBMERSIBLE_SUBS is false")
   void attackingFirstStrikeWithdrawIfAble() {
-    final Unit unit1 = givenUnitFirstStrikeAndEvade();
+    final Unit unit1 = givenSeaUnitFirstStrikeAndEvade();
     final Unit unit2 = givenAnyUnit();
 
     final List<String> steps =
         givenBattleSteps(
             givenBattleStateBuilder()
                 .gameData(
-                    givenGameData()
-                        .withWW2V2(false)
-                        .withDefendingSuicideAndMunitionUnitsDoNotFire(false)
-                        .withSubRetreatBeforeBattle(false)
-                        .withAlliedAirIndependent(true)
-                        .build())
+                    givenGameDataWithLenientProperties().withAlliedAirIndependent(true).build())
                 .attacker(attacker)
                 .defender(defender)
                 .attackingUnits(List.of(unit1))
@@ -1719,19 +1602,14 @@ public class BattleStepsTest {
       "Verify attacking firstStrike can't withdraw when "
           + "SUBMERSIBLE_SUBS is false and no retreat territories")
   void attackingFirstStrikeNoWithdrawIfEmptyTerritories() {
-    final Unit unit1 = givenUnitFirstStrikeAndEvade();
+    final Unit unit1 = givenSeaUnitFirstStrikeAndEvade();
     final Unit unit2 = givenAnyUnit();
 
     final List<String> steps =
         givenBattleSteps(
             givenBattleStateBuilder()
                 .gameData(
-                    givenGameData()
-                        .withWW2V2(false)
-                        .withDefendingSuicideAndMunitionUnitsDoNotFire(false)
-                        .withSubRetreatBeforeBattle(false)
-                        .withAlliedAirIndependent(true)
-                        .build())
+                    givenGameDataWithLenientProperties().withAlliedAirIndependent(true).build())
                 .attacker(attacker)
                 .defender(defender)
                 .attackingUnits(List.of(unit1))
@@ -1754,25 +1632,20 @@ public class BattleStepsTest {
       "Verify attacking firstStrike can't withdraw when "
           + "SUBMERSIBLE_SUBS is false and destroyers present")
   void attackingFirstStrikeNoWithdrawIfDestroyers() {
-    final Unit unit1 = givenUnitFirstStrike();
+    final Unit unit1 = givenSeaUnitFirstStrike();
     final Unit unit2 = givenUnitDestroyer();
 
     final List<String> steps =
         givenBattleSteps(
             givenBattleStateBuilder()
                 .gameData(
-                    givenGameData()
-                        .withWW2V2(false)
-                        .withDefendingSuicideAndMunitionUnitsDoNotFire(false)
-                        .withSubRetreatBeforeBattle(false)
-                        .withAlliedAirIndependent(true)
-                        .build())
+                    givenGameDataWithLenientProperties().withAlliedAirIndependent(true).build())
                 .attacker(attacker)
                 .defender(defender)
                 .attackingUnits(List.of(unit1))
                 .defendingUnits(List.of(unit2))
                 .attackerRetreatTerritories(List.of(battleSite))
-                .battleSite(battleSite)
+                .battleSite(givenSeaBattleSite())
                 .build());
 
     assertThat(
@@ -1789,21 +1662,15 @@ public class BattleStepsTest {
       "Verify attacking firstStrike can withdraw when "
           + "SUBMERSIBLE_SUBS is false and defenseless transports with non restricted casualties")
   void attackingFirstStrikeWithdrawIfNonRestrictedDefenselessTransports() {
-    final Unit unit1 = givenUnitFirstStrikeAndEvade();
-    final UnitAndAttachment unitAndAttachment = newUnitAndAttachment();
+    final Unit unit1 = givenSeaUnitFirstStrikeAndEvade();
+    final UnitAndAttachment unitAndAttachment = newSeaUnitAndAttachment();
     final Unit unit2 = unitAndAttachment.unit;
 
     final List<String> steps =
         givenBattleSteps(
             givenBattleStateBuilder()
                 .gameData(
-                    givenGameData()
-                        .withWW2V2(false)
-                        .withDefendingSuicideAndMunitionUnitsDoNotFire(false)
-                        .withSubRetreatBeforeBattle(false)
-                        .withTransportCasualtiesRestricted(false)
-                        .withAlliedAirIndependent(true)
-                        .build())
+                    givenGameDataWithLenientProperties().withAlliedAirIndependent(true).build())
                 .attacker(attacker)
                 .defender(defender)
                 .attackingUnits(List.of(unit1))
@@ -1829,30 +1696,26 @@ public class BattleStepsTest {
   @Test
   @DisplayName("Verify defending firstStrike can withdraw when SUBMERSIBLE_SUBS is false")
   void defendingFirstStrikeWithdrawIfAble() {
-    final Unit unit1 = givenAnyUnit();
-    final Unit unit2 = givenUnitFirstStrikeAndEvade();
+    final Unit unit1 = givenUnitIsSea();
+    final Unit unit2 = givenSeaUnitFirstStrikeAndEvade();
 
+    final Territory battleTerritory = givenSeaBattleSite();
     final Territory retreatTerritory = mock(Territory.class);
     when(retreatTerritory.isWater()).thenReturn(true);
-    when(retreatTerritory.getUnitCollection()).thenReturn(mock(UnitCollection.class));
 
     final List<String> steps =
         givenBattleSteps(
             givenBattleStateBuilder()
                 .gameData(
-                    givenGameData()
-                        .withTerritoryHasNeighbors(battleSite, Set.of(retreatTerritory))
-                        .withDefendingSuicideAndMunitionUnitsDoNotFire(false)
-                        .withWW2V2(false)
-                        .withDefendingSubsSneakAttack(false)
-                        .withSubRetreatBeforeBattle(false)
+                    givenGameDataWithLenientProperties()
                         .withAlliedAirIndependent(true)
+                        .withTerritoryHasNeighbors(battleTerritory, Set.of(retreatTerritory))
                         .build())
                 .attacker(attacker)
                 .defender(defender)
                 .attackingUnits(List.of(unit1))
                 .defendingUnits(List.of(unit2))
-                .battleSite(battleSite)
+                .battleSite(battleTerritory)
                 .build());
 
     assertThat(
@@ -1876,13 +1739,7 @@ public class BattleStepsTest {
         givenBattleSteps(
             givenBattleStateBuilder()
                 .gameData(
-                    givenGameData()
-                        .withDefendingSuicideAndMunitionUnitsDoNotFire(false)
-                        .withSubRetreatBeforeBattle(false)
-                        .withWW2V2(false)
-                        .withDefendingSubsSneakAttack(false)
-                        .withAlliedAirIndependent(true)
-                        .build())
+                    givenGameDataWithLenientProperties().withAlliedAirIndependent(true).build())
                 .attacker(attacker)
                 .defender(defender)
                 .attackingUnits(List.of(unit1))
@@ -1905,23 +1762,18 @@ public class BattleStepsTest {
           + "SUBMERSIBLE_SUBS is false and destroyers present")
   void defendingFirstStrikeNoWithdrawIfDestroyers() {
     final Unit unit1 = givenUnitDestroyer();
-    final Unit unit2 = givenUnitFirstStrikeAndEvade();
+    final Unit unit2 = givenSeaUnitFirstStrikeAndEvade();
 
     final List<String> steps =
         givenBattleSteps(
             givenBattleStateBuilder()
                 .gameData(
-                    givenGameData()
-                        .withDefendingSuicideAndMunitionUnitsDoNotFire(false)
-                        .withWW2V2(false)
-                        .withSubRetreatBeforeBattle(false)
-                        .withAlliedAirIndependent(true)
-                        .build())
+                    givenGameDataWithLenientProperties().withAlliedAirIndependent(true).build())
                 .attacker(attacker)
                 .defender(defender)
                 .attackingUnits(List.of(unit1))
                 .defendingUnits(List.of(unit2))
-                .battleSite(battleSite)
+                .battleSite(givenSeaBattleSite())
                 .build());
 
     assertThat(
@@ -1937,18 +1789,13 @@ public class BattleStepsTest {
   @DisplayName("Verify attacking air units at sea can withdraw")
   void attackingAirUnitsAtSeaCanWithdraw() {
     final Unit unit1 = givenUnitIsAir();
-    final Unit unit2 = givenAnyUnit();
+    final Unit unit2 = givenUnitIsSea();
 
     final List<String> steps =
         givenBattleSteps(
             givenBattleStateBuilder()
                 .gameData(
-                    givenGameData()
-                        .withDefendingSuicideAndMunitionUnitsDoNotFire(false)
-                        .withSubRetreatBeforeBattle(false)
-                        .withTransportCasualtiesRestricted(false)
-                        .withAlliedAirIndependent(true)
-                        .build())
+                    givenGameDataWithLenientProperties().withAlliedAirIndependent(true).build())
                 .attacker(attacker)
                 .defender(defender)
                 .attackingUnits(List.of(unit1))
@@ -1974,9 +1821,7 @@ public class BattleStepsTest {
         givenBattleSteps(
             givenBattleStateBuilder()
                 .gameData(
-                    givenGameData()
-                        .withSubRetreatBeforeBattle(false)
-                        .withDefendingSuicideAndMunitionUnitsDoNotFire(false)
+                    givenGameDataWithLenientProperties()
                         .withAlliedAirIndependent(true)
                         .withPartialAmphibiousRetreat(true)
                         .build())
@@ -2006,12 +1851,8 @@ public class BattleStepsTest {
         givenBattleSteps(
             givenBattleStateBuilder()
                 .gameData(
-                    givenGameData()
-                        .withSubRetreatBeforeBattle(false)
-                        .withWW2V2(false)
+                    givenGameDataWithLenientProperties()
                         .withAlliedAirIndependent(true)
-                        .withAttackerRetreatPlanes(false)
-                        .withDefendingSuicideAndMunitionUnitsDoNotFire(false)
                         .withPartialAmphibiousRetreat(true)
                         .build())
                 .attacker(attacker)
@@ -2037,11 +1878,7 @@ public class BattleStepsTest {
         givenBattleSteps(
             givenBattleStateBuilder()
                 .gameData(
-                    givenGameData()
-                        .withDefendingSuicideAndMunitionUnitsDoNotFire(false)
-                        .withSubRetreatBeforeBattle(false)
-                        .withAlliedAirIndependent(true)
-                        .build())
+                    givenGameDataWithLenientProperties().withAlliedAirIndependent(true).build())
                 .attacker(attacker)
                 .defender(defender)
                 .attackingUnits(List.of(unit1, unit3))
@@ -2065,11 +1902,8 @@ public class BattleStepsTest {
         givenBattleSteps(
             givenBattleStateBuilder()
                 .gameData(
-                    givenGameData()
-                        .withDefendingSuicideAndMunitionUnitsDoNotFire(false)
-                        .withSubRetreatBeforeBattle(false)
+                    givenGameDataWithLenientProperties()
                         .withAlliedAirIndependent(true)
-                        .withPartialAmphibiousRetreat(false)
                         .withWW2V2(true)
                         .build())
                 .attacker(attacker)
@@ -2099,11 +1933,7 @@ public class BattleStepsTest {
         givenBattleSteps(
             givenBattleStateBuilder()
                 .gameData(
-                    givenGameData()
-                        .withSubRetreatBeforeBattle(false)
-                        .withWW2V2(false)
-                        .withAttackerRetreatPlanes(false)
-                        .withDefendingSuicideAndMunitionUnitsDoNotFire(false)
+                    givenGameDataWithLenientProperties()
                         .withAlliedAirIndependent(true)
                         .withPartialAmphibiousRetreat(true)
                         .build())
@@ -2130,12 +1960,8 @@ public class BattleStepsTest {
         givenBattleSteps(
             givenBattleStateBuilder()
                 .gameData(
-                    givenGameData()
-                        .withSubRetreatBeforeBattle(false)
-                        .withWW2V2(false)
-                        .withDefendingSuicideAndMunitionUnitsDoNotFire(false)
+                    givenGameDataWithLenientProperties()
                         .withAlliedAirIndependent(true)
-                        .withPartialAmphibiousRetreat(false)
                         .withAttackerRetreatPlanes(true)
                         .build())
                 .attacker(attacker)
@@ -2161,9 +1987,7 @@ public class BattleStepsTest {
         givenBattleSteps(
             givenBattleStateBuilder()
                 .gameData(
-                    givenGameData()
-                        .withDefendingSuicideAndMunitionUnitsDoNotFire(false)
-                        .withSubRetreatBeforeBattle(false)
+                    givenGameDataWithLenientProperties()
                         .withAlliedAirIndependent(true)
                         .withTransportCasualtiesRestricted(true)
                         .build())
@@ -2176,5 +2000,89 @@ public class BattleStepsTest {
                 .build());
 
     assertThat(steps, is(basicFightStepStrings()));
+  }
+
+  @Test
+  @DisplayName("Verify that extra steps won't be created due to canNotTarget and non-participants")
+  void nonParticipantsDontCreateExtraStepsWithCannotTarget() {
+    // Two attacking units of different types.
+    final Unit unit1 = givenAnyUnit();
+    lenient().when(unit1.getOwner()).thenReturn(attacker);
+    final Unit unit2 = givenAnyUnit();
+    lenient().when(unit2.getOwner()).thenReturn(attacker);
+    final UnitType unit2Type = unit2.getType();
+
+    // One defending unit that can only target one of the attackers.
+    final Unit unit3 = givenAnyUnit();
+    lenient().when(unit3.getOwner()).thenReturn(defender);
+    final UnitAttachment unit3Attachment = unit3.getUnitAttachment();
+    when(unit3Attachment.getCanNotTarget()).thenReturn(Set.of(unit2Type));
+    // And an infra unit on the defense that should not participate in combat.
+    final Unit unit4 = givenUnitIsInfrastructure();
+    lenient().when(unit4.getOwner()).thenReturn(defender);
+
+    final var unitTypeList =
+        List.of(unit1.getType(), unit2.getType(), unit3.getType(), unit4.getType());
+
+    final List<String> steps =
+        givenBattleSteps(
+            givenBattleStateBuilder()
+                .gameData(
+                    givenGameDataWithLenientProperties().withUnitTypeList(unitTypeList).build())
+                .attacker(attacker)
+                .defender(defender)
+                .attackingUnits(List.of(unit1, unit2))
+                .defendingUnits(List.of(unit3, unit4))
+                .battleSite(battleSite)
+                .amphibious(false)
+                .build());
+
+    assertThat(steps, is(basicFightStepStrings()));
+  }
+
+  @Test
+  @DisplayName("Verify that extra steps won't be created due to canNotTarget and non-participants")
+  void nonParticipantsOnDefenseDontCreateExtraStepsWithCannotTarget() {
+    // Two attacking air units of different types.
+    final Unit unit1Plane = givenUnitIsAir();
+    lenient().when(unit1Plane.getOwner()).thenReturn(attacker);
+    final Unit unit2Plane = givenUnitIsAir();
+    lenient().when(unit2Plane.getOwner()).thenReturn(attacker);
+
+    // Defending transport with infantry on board.
+    final Unit unit3Transport = givenUnitSeaTransport();
+    lenient().when(unit3Transport.getOwner()).thenReturn(defender);
+    final Unit unit4Infantry = givenAnyUnit();
+    lenient().when(unit4Infantry.getOwner()).thenReturn(defender);
+    lenient().when(unit4Infantry.getTransportedBy()).thenReturn(unit3Transport);
+
+    // One of the planes can't target the infantry. This shouldn't matter since the infantry is a
+    // non-combatant.
+    final UnitType unit4InfantryType = unit4Infantry.getType();
+    when(unit1Plane.getUnitAttachment().getCanNotTarget()).thenReturn(Set.of(unit4InfantryType));
+
+    final var unitTypeList =
+        List.of(
+            unit1Plane.getType(),
+            unit2Plane.getType(),
+            unit3Transport.getType(),
+            unit4Infantry.getType());
+
+    final List<String> steps =
+        givenBattleSteps(
+            givenBattleStateBuilder()
+                .gameData(
+                    givenGameDataWithLenientProperties().withUnitTypeList(unitTypeList).build())
+                .attacker(attacker)
+                .defender(defender)
+                .attackingUnits(List.of(unit1Plane, unit2Plane))
+                .defendingUnits(List.of(unit3Transport, unit4Infantry))
+                .battleSite(givenSeaBattleSite())
+                .amphibious(false)
+                .build());
+
+    List<String> expectedSteps = basicFightStepStrings();
+    expectedSteps.add(attacker.getName() + ATTACKER_WITHDRAW);
+    assertThat(steps, is(expectedSteps));
   }
 }

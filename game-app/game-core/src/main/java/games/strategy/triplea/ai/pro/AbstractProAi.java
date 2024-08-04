@@ -54,7 +54,7 @@ import org.triplea.util.Tuple;
 /** Pro AI. */
 public abstract class AbstractProAi extends AbstractAi {
 
-  private final ProOddsCalculator calc;
+  @Getter private final ProOddsCalculator calc;
   @Getter private final ProData proData;
 
   // Phases
@@ -97,10 +97,6 @@ public abstract class AbstractProAi extends AbstractAi {
   public void stopGame() {
     super.stopGame(); // absolutely MUST call super.stopGame() first
     calc.stop();
-  }
-
-  public ProOddsCalculator getCalc() {
-    return calc;
   }
 
   private void initializeData() {
@@ -394,8 +390,10 @@ public abstract class AbstractProAi extends AbstractAi {
 
     if (defaultCasualties.size() != count) {
       throw new IllegalStateException(
-          "Select Casualties showing different numbers for number of hits to take vs total "
-              + "size of default casualty selections");
+          String.format(
+              "Select Casualties showing different numbers for number of hits to take (%s) vs "
+                  + "total size of default casualty selections (%s) in %s (hit = %s)",
+              count, defaultCasualties.size(), battleSite, hit.getName()));
     }
     if (defaultCasualties.getKilled().isEmpty()) {
       return new CasualtyDetails(defaultCasualties, false);

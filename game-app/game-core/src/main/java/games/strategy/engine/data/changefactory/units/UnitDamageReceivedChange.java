@@ -20,6 +20,7 @@ public class UnitDamageReceivedChange extends Change {
 
   /** Maps unit ids to the total damage they have */
   private final Map<String, Integer> newTotalDamage;
+
   /** Maps unit ids to the total damage they used to have */
   private final Map<String, Integer> oldTotalDamage;
 
@@ -49,7 +50,9 @@ public class UnitDamageReceivedChange extends Change {
     newTotalDamage.forEach(
         (unitId, damage) -> {
           final Unit unit = data.getUnits().get(UUID.fromString(unitId));
-          unit.setHits(damage);
+          if (unit != null) {
+            unit.setHits(damage);
+          }
         });
     // invoke territory change listeners
     for (final String territory : territoriesToNotify) {

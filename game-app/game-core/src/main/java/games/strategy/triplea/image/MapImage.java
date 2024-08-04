@@ -13,11 +13,13 @@ import java.net.URL;
 import java.util.Arrays;
 import java.util.prefs.Preferences;
 import javax.imageio.ImageIO;
+import lombok.Getter;
 
 /**
  * Responsible for drawing countries on the map. Is not responsible for drawing things on top of the
  * map, such as units, routes etc.
  */
+@Getter
 public class MapImage {
   private static Font propertyMapFont = null;
   private static Color propertyTerritoryNameAndPuAndCommentColor = null;
@@ -50,7 +52,7 @@ public class MapImage {
   private static final Color UNIT_HIT_DAMAGE_COLOR_DEFAULT = Color.BLACK;
   private static final Color UNIT_HIT_DAMAGE_OUTLINE_DEFAULT = Color.LIGHT_GRAY;
 
-  private BufferedImage smallMapImage;
+  private final BufferedImage smallMapImage;
 
   public static Font getPropertyMapFont() {
     if (propertyMapFont == null) {
@@ -234,10 +236,6 @@ public class MapImage {
   private static void removeProperty(final String property) {
     final Preferences pref = Preferences.userNodeForPackage(MapImage.class);
     pref.remove(property);
-  }
-
-  public BufferedImage getSmallMapImage() {
-    return smallMapImage;
   }
 
   public MapImage(final ResourceLoader loader) {

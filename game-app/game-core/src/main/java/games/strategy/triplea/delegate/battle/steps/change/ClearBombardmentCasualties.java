@@ -20,9 +20,9 @@ public class ClearBombardmentCasualties implements BattleStep {
   private final BattleActions battleActions;
 
   @Override
-  public List<String> getNames() {
+  public List<StepDetails> getAllStepDetails() {
     return canBombardmentOccur() && clearCasualties()
-        ? List.of(REMOVE_BOMBARDMENT_CASUALTIES)
+        ? List.of(new StepDetails(REMOVE_BOMBARDMENT_CASUALTIES, this))
         : List.of();
   }
 
@@ -34,7 +34,7 @@ public class ClearBombardmentCasualties implements BattleStep {
   @Override
   public void execute(final ExecutionStack stack, final IDelegateBridge bridge) {
     if (canBombardmentOccur() && clearCasualties()) {
-      battleActions.clearWaitingToDieAndDamagedChangesInto(bridge);
+      battleActions.clearWaitingToDieAndDamagedChangesInto(bridge, BattleState.Side.DEFENSE);
     }
   }
 

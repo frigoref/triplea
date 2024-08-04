@@ -54,6 +54,7 @@ import lombok.AllArgsConstructor;
 import org.triplea.java.PredicateBuilder;
 import org.triplea.java.collections.CollectionUtils;
 import org.triplea.java.collections.IntegerMap;
+import org.triplea.util.Triple;
 
 /** Responsible for validating unit movement. */
 @AllArgsConstructor
@@ -192,10 +193,9 @@ public class MoveValidator {
                   .negate());
       if (matches.isEmpty() || !matches.stream().allMatch(Matches.unitIsOwnedBy(player))) {
         result.setError(
-            "Player, "
-                + player.getName()
-                + ", is not owner of all the units: "
-                + MyFormatter.unitsToTextNoOwner(units));
+            String.format(
+                "Player, %s, is not owner of all the units: %s",
+                player.getName(), MyFormatter.unitsToTextNoOwner(units)));
         return result;
       }
     }
@@ -215,9 +215,8 @@ public class MoveValidator {
     final Collection<Territory> landOnRoute = route.getMatches(Matches.territoryIsLand());
     if (!landOnRoute.isEmpty()) {
       // TODO: if this ever changes, we need to also update getBestRoute(), because getBestRoute is
-      // also checking to
-      // make sure we avoid land territories owned by nations with these 2 relationship type
-      // attachment options
+      // also checking to make sure we avoid land territories owned by nations with these 2
+      // relationship type attachment options
       for (final Territory t : landOnRoute) {
         if (units.stream().anyMatch(Matches.unitIsLand())
             && !data.getRelationshipTracker().canMoveLandUnitsOverOwnedLand(player, t.getOwner())) {
@@ -290,7 +289,7 @@ public class MoveValidator {
    */
   public @Nullable String validateCanal(
       final Route route, @Nullable final Collection<Unit> units, final GamePlayer player) {
-    return validateCanal(route, units, new HashMap<>(), player);
+    return validateCanal(route, units, Map.of(), player);
   }
 
   @Nullable
@@ -299,6 +298,20 @@ public class MoveValidator {
       @Nullable final Collection<Unit> units,
       final Map<Unit, Collection<Unit>> airTransportDependents,
       final GamePlayer player) {
+    Map<Territory, Collection<CanalAttachment>> territoryCanals = new HashMap<>();
+    int numCanals = 0;
+    for (Territory t : route.getAllTerritories()) {
+      // Only check canals that are on the route
+      var canals = CanalAttachment.get(t, route);
+      territoryCanals.put(t, canals);
+      numCanals += canals.size();
+    }
+    if (numCanals == 0) {
+      return null;
+    }
+    final boolean mustControlAllCanals =
+        Properties.getControlAllCanalsBetweenTerritoriesToPass(data.getProperties());
+
     // Check each unit 1 by 1 to see if they can move through necessary canals on route
     String result = null;
     final Set<Unit> unitsThatFailCanal = new HashSet<>();
@@ -309,14 +322,9 @@ public class MoveValidator {
     for (final Unit unit : unitsWithoutDependents) {
       for (final Territory t : route.getAllTerritories()) {
         Optional<String> failureMessage = Optional.empty();
-        for (final CanalAttachment canalAttachment : CanalAttachment.get(t)) {
-          if (!CanalAttachment.isCanalOnRoute(canalAttachment.getCanalName(), route)) {
-            continue; // Only check canals that are on the route
-          }
+        for (CanalAttachment canalAttachment : territoryCanals.get(t)) {
           failureMessage = canPassThroughCanal(canalAttachment, unit, player);
           final boolean canPass = failureMessage.isEmpty();
-          final boolean mustControlAllCanals =
-              Properties.getControlAllCanalsBetweenTerritoriesToPass(data.getProperties());
           if (mustControlAllCanals != canPass) {
             // If need to control any canal and can pass OR need to control all and can't pass.
             break;
@@ -364,10 +372,7 @@ public class MoveValidator {
       final GamePlayer player) {
     boolean canPass = true;
     final Route route = new Route(start, end);
-    for (final CanalAttachment canalAttachment : CanalAttachment.get(start)) {
-      if (!CanalAttachment.isCanalOnRoute(canalAttachment.getCanalName(), route)) {
-        continue; // Only check canals that are on the route
-      }
+    for (final CanalAttachment canalAttachment : CanalAttachment.get(start, route)) {
       final Collection<Unit> unitsWithoutDependents = findNonDependentUnits(units, route, Map.of());
       canPass = canAnyPassThroughCanal(canalAttachment, unitsWithoutDependents, player).isEmpty();
       final boolean mustControlAllCanals =
@@ -590,10 +595,8 @@ public class MoveValidator {
       return result.setErrorReturnResult("Cannot move submarines under destroyers");
     }
     // Can't advance to battle unless only ignored units on route, only air units to sea, or only
-    // units that can enter
-    // territories with enemy units during NCM
-    if (end.getUnitCollection()
-            .anyMatch(Matches.enemyUnit(player).and(Matches.unitIsSubmerged().negate()))
+    // units that can enter  territories with enemy units during NCM
+    if (end.anyUnitsMatch(Matches.enemyUnit(player).and(Matches.unitIsSubmerged().negate()))
         && !onlyIgnoredUnitsOnPath(route, player, false)
         && !(end.isWater() && units.stream().allMatch(Matches.unitIsAir()))
         && !(Properties.getSubsCanEndNonCombatMoveWithEnemies(data.getProperties())
@@ -644,8 +647,7 @@ public class MoveValidator {
     if (!Properties.getMovementByTerritoryRestricted(data.getProperties())) {
       return result;
     }
-    final RulesAttachment ra =
-        (RulesAttachment) player.getAttachment(Constants.RULES_ATTACHMENT_NAME);
+    final RulesAttachment ra = player.getRulesAttachment();
     if (ra == null || ra.getMovementRestrictionTerritories() == null) {
       return result;
     }
@@ -805,58 +807,44 @@ public class MoveValidator {
       }
     }
     // test for stack limits per unit
+    final PlayerAttachment pa = PlayerAttachment.get(player);
+    final Set<Triple<Integer, String, Set<UnitType>>> playerMovementLimit =
+        (pa != null ? pa.getMovementLimit() : Set.of());
+    final Set<Triple<Integer, String, Set<UnitType>>> playerAttackingLimit =
+        (pa != null ? pa.getAttackingLimit() : Set.of());
+    final Predicate<Unit> hasMovementOrAttackingLimit =
+        unit -> {
+          final var ua = unit.getUnitAttachment();
+          if (ua.getMovementLimit() != null || ua.getAttackingLimit() != null) {
+            return true;
+          }
+          for (final var limit : playerMovementLimit) {
+            if (limit.getThird().contains(unit.getType())) {
+              return true;
+            }
+          }
+          for (final var limit : playerAttackingLimit) {
+            if (limit.getThird().contains(unit.getType())) {
+              return true;
+            }
+          }
+          return false;
+        };
     final Collection<Unit> unitsWithStackingLimits =
-        CollectionUtils.getMatches(
-            units, Matches.unitHasMovementLimit().or(Matches.unitHasAttackingLimit()));
+        CollectionUtils.getMatches(units, hasMovementOrAttackingLimit);
     for (final Territory t : route.getSteps()) {
-      final Collection<Unit> unitsAllowedSoFar = new ArrayList<>();
+      final String limitType;
       if (Matches.isTerritoryEnemyAndNotUnownedWater(player).test(t)
-          || t.getUnitCollection().anyMatch(Matches.unitIsEnemyOf(player))) {
-        for (final Unit unit : unitsWithStackingLimits) {
-          final UnitType ut = unit.getType();
-          int maxAllowed =
-              UnitAttachment.getMaximumNumberOfThisUnitTypeToReachStackingLimit(
-                  "attackingLimit",
-                  ut,
-                  t,
-                  player,
-                  data.getRelationshipTracker(),
-                  data.getProperties());
-          maxAllowed -= CollectionUtils.countMatches(unitsAllowedSoFar, Matches.unitIsOfType(ut));
-          if (maxAllowed > 0) {
-            unitsAllowedSoFar.add(unit);
-          } else {
-            result.addDisallowedUnit(
-                "UnitType " + ut.getName() + " has reached stacking limit", unit);
-          }
-        }
-        if (!PlayerAttachment.getCanTheseUnitsMoveWithoutViolatingStackingLimit(
-            "attackingLimit", units, t, player, data)) {
-          return result.setErrorReturnResult("Units Cannot Go Over Stacking Limit");
-        }
+          || t.anyUnitsMatch(Matches.unitIsEnemyOf(player))) {
+        limitType = UnitStackingLimitFilter.ATTACKING_LIMIT;
       } else {
-        for (final Unit unit : unitsWithStackingLimits) {
-          final UnitType ut = unit.getType();
-          int maxAllowed =
-              UnitAttachment.getMaximumNumberOfThisUnitTypeToReachStackingLimit(
-                  "movementLimit",
-                  ut,
-                  t,
-                  player,
-                  data.getRelationshipTracker(),
-                  data.getProperties());
-          maxAllowed -= CollectionUtils.countMatches(unitsAllowedSoFar, Matches.unitIsOfType(ut));
-          if (maxAllowed > 0) {
-            unitsAllowedSoFar.add(unit);
-          } else {
-            result.addDisallowedUnit(
-                "UnitType " + ut.getName() + " has reached stacking limit", unit);
-          }
-        }
-        if (!PlayerAttachment.getCanTheseUnitsMoveWithoutViolatingStackingLimit(
-            "movementLimit", units, t, player, data)) {
-          return result.setErrorReturnResult("Units Cannot Go Over Stacking Limit");
-        }
+        limitType = UnitStackingLimitFilter.MOVEMENT_LIMIT;
+      }
+      final Collection<Unit> allowedUnits =
+          UnitStackingLimitFilter.filterUnits(unitsWithStackingLimits, limitType, player, t);
+      for (Unit unit : CollectionUtils.difference(unitsWithStackingLimits, allowedUnits)) {
+        result.addDisallowedUnit(
+            "Unit type " + unit.getType().getName() + " has reached stacking limit", unit);
       }
     }
 
@@ -879,17 +867,12 @@ public class MoveValidator {
       final Collection<Unit> units,
       final Route route,
       final Map<Unit, Collection<Unit>> airTransportDependents) {
-    final Map<Unit, Collection<Unit>> dependentsMap =
-        getDependents(CollectionUtils.getMatches(units, Matches.unitCanTransport()));
-    final Set<Unit> dependents =
-        dependentsMap.values().stream().flatMap(Collection::stream).collect(Collectors.toSet());
-    dependents.addAll(
-        airTransportDependents.values().stream()
-            .flatMap(Collection::stream)
-            .collect(Collectors.toSet()));
     final Collection<Unit> unitsWithoutDependents = new ArrayList<>();
     unitsWithoutDependents.addAll(route.getStart().isWater() ? getNonLand(units) : units);
-    unitsWithoutDependents.removeAll(dependents);
+    unitsWithoutDependents.removeIf(u -> u.getTransportedBy() != null);
+    for (Collection<Unit> deps : airTransportDependents.values()) {
+      unitsWithoutDependents.removeAll(deps);
+    }
     return unitsWithoutDependents;
   }
 
@@ -955,15 +938,6 @@ public class MoveValidator {
       }
     }
     return map;
-  }
-
-  public static Map<Unit, Collection<Unit>> getDependents(final Collection<Unit> units) {
-    // just worry about transports
-    final Map<Unit, Collection<Unit>> dependents = new HashMap<>();
-    for (final Unit unit : units) {
-      dependents.put(unit, unit.getTransporting());
-    }
-    return dependents;
   }
 
   /**
@@ -1321,7 +1295,7 @@ public class MoveValidator {
           && nonParatroopersPresent(player, landAndAir)
           && !onlyIgnoredUnitsOnPath(route, player, false)
           && !AbstractMoveDelegate.getBattleTracker(data)
-              .didAllThesePlayersJustGoToWarThisTurn(player, route.getEnd().getUnits(), data)) {
+              .didAllThesePlayersJustGoToWarThisTurn(player, route.getEnd().getUnits())) {
         return result.setErrorReturnResult("Cannot load when enemy sea units are present");
       }
       if (!isEditMode) {
@@ -1615,6 +1589,11 @@ public class MoveValidator {
   }
 
   public static Map<Unit, Collection<Unit>> carrierMustMoveWith(
+      final Territory start, final GamePlayer player) {
+    return carrierMustMoveWith(start.getUnits(), start.getUnits(), player);
+  }
+
+  public static Map<Unit, Collection<Unit>> carrierMustMoveWith(
       final Collection<Unit> units, final Territory start, final GamePlayer player) {
     return carrierMustMoveWith(units, start.getUnits(), player);
   }
@@ -1687,14 +1666,13 @@ public class MoveValidator {
   }
 
   /** Get the route ignoring forced territories. */
-  public static Route getBestRoute(
+  public static @Nullable Route getBestRoute(
       final Territory start,
       final Territory end,
       final GameData data,
       final GamePlayer player,
       final Collection<Unit> units,
       final boolean forceLandOrSeaRoute) {
-
     final boolean hasLand = units.stream().anyMatch(Matches.unitIsLand());
     final boolean hasAir = units.stream().anyMatch(Matches.unitIsAir());
     final boolean isNeutralsImpassable =
@@ -1732,12 +1710,10 @@ public class MoveValidator {
 
     // Avoid looking at the dependents
     final Collection<Unit> unitsWhichAreNotBeingTransportedOrDependent =
-        new ArrayList<>(
-            CollectionUtils.getMatches(
-                units,
-                Matches.unitIsBeingTransportedByOrIsDependentOfSomeUnitInThisList(
-                        units, player, true)
-                    .negate()));
+        CollectionUtils.getMatches(
+            units,
+            Matches.unitIsBeingTransportedByOrIsDependentOfSomeUnitInThisList(units, player, true)
+                .negate());
 
     // If start and end are land, try a land route. Don't force a land route, since planes may be
     // moving
@@ -1900,7 +1876,7 @@ public class MoveValidator {
     final Predicate<Unit> airborneBaseMatch = getAirborneMatch(airborneBases, alliesForBases);
     final Territory start = route.getStart();
     final Territory end = route.getEnd();
-    final Collection<Unit> basesAtStart = start.getUnitCollection().getMatches(airborneBaseMatch);
+    final Collection<Unit> basesAtStart = start.getMatches(airborneBaseMatch);
     if (basesAtStart.isEmpty()) {
       return result.setErrorReturnResult("Require Airborne Base At Originating Territory");
     }

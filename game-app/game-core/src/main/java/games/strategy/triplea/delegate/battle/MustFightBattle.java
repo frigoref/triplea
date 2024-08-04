@@ -28,6 +28,7 @@ import games.strategy.engine.history.change.units.RemoveUnitsHistoryChange;
 import games.strategy.engine.history.change.units.TransformDamagedUnitsHistoryChange;
 import games.strategy.engine.player.Player;
 import games.strategy.triplea.Properties;
+import games.strategy.triplea.UnitUtils;
 import games.strategy.triplea.delegate.ExecutionStack;
 import games.strategy.triplea.delegate.IExecutable;
 import games.strategy.triplea.delegate.Matches;
@@ -45,6 +46,7 @@ import games.strategy.triplea.delegate.battle.steps.change.RemoveUnprotectedUnit
 import games.strategy.triplea.delegate.battle.steps.change.suicide.RemoveFirstStrikeSuicide;
 import games.strategy.triplea.delegate.battle.steps.change.suicide.RemoveGeneralSuicide;
 import games.strategy.triplea.delegate.battle.steps.fire.NavalBombardment;
+import games.strategy.triplea.delegate.battle.steps.fire.SelectCasualties;
 import games.strategy.triplea.delegate.battle.steps.fire.aa.DefensiveAaFire;
 import games.strategy.triplea.delegate.battle.steps.fire.aa.OffensiveAaFire;
 import games.strategy.triplea.delegate.battle.steps.fire.firststrike.DefensiveFirstStrike;
@@ -64,9 +66,12 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
@@ -116,8 +121,14 @@ public class MustFightBattle extends DependentBattle
   // and resume while in the middle of a battle.
   private final ExecutionStack stack = new ExecutionStack();
 
-  @Getter(onMethod_ = @Override)
-  private List<String> stepStrings;
+  @Getter private List<String> stepStrings;
+  // Stores the firing units corresponding to the casualty steps in stepStrings. This is to fix a
+  // "step name not found" error due to stepStrings being generated at the start of combat, but
+  // actual steps being produced as we advance through combat. The error would happen when there are
+  // multiple casualty steps at first, but when we get to that point in combat, some of those get
+  // removed (due units dying and not having a counterattack) and we may end up with a generic
+  // casualty step. To fix this, we use the map to find the original step name for the firing units.
+  private Map<String, Collection<Unit>> stepFiringUnits;
 
   @RemoveOnNextMajorRelease
   @SuppressWarnings("unused")
@@ -146,8 +157,7 @@ public class MustFightBattle extends DependentBattle
       final GameData data,
       final BattleTracker battleTracker) {
     super(battleSite, attacker, battleTracker, data);
-    defendingUnits.addAll(
-        this.battleSite.getUnitCollection().getMatches(Matches.enemyUnit(attacker)));
+    defendingUnits.addAll(this.battleSite.getMatches(Matches.enemyUnit(attacker)));
     maxRounds =
         battleSite.isWater()
             ? Properties.getSeaBattleRounds(data.getProperties())
@@ -156,7 +166,7 @@ public class MustFightBattle extends DependentBattle
 
   void resetDefendingUnits(final GamePlayer attacker) {
     defendingUnits.clear();
-    defendingUnits.addAll(battleSite.getUnitCollection().getMatches(Matches.enemyUnit(attacker)));
+    defendingUnits.addAll(battleSite.getMatches(Matches.enemyUnit(attacker)));
   }
 
   /** Used for head-less battles. */
@@ -171,32 +181,6 @@ public class MustFightBattle extends DependentBattle
     bombardingUnits = new ArrayList<>(bombarding);
     this.defender = defender;
     this.territoryEffects = territoryEffects;
-  }
-
-  @Override
-  public void removeAttack(final Route route, final Collection<Unit> units) {
-    attackingUnits.removeAll(units);
-    // the route could be null, in the case of a unit in a territory where a sub is submerged.
-    if (route == null) {
-      return;
-    }
-    final Territory attackingFrom = route.getTerritoryBeforeEnd();
-    final Collection<Unit> attackingFromMapUnits =
-        attackingFromMap.getOrDefault(attackingFrom, new ArrayList<>());
-    attackingFromMapUnits.removeAll(units);
-    if (attackingFromMapUnits.isEmpty()) {
-      this.attackingFromMap.remove(attackingFrom);
-    }
-    // deal with amphibious assaults
-    if (attackingFrom.isWater()) {
-      // if none of the units is a land unit, the attack from that territory is no longer an
-      // amphibious assault
-      if (attackingFromMapUnits.stream().noneMatch(Matches.unitIsLand())) {
-        getAmphibiousAttackTerritories().remove(attackingFrom);
-        // do we have any amphibious attacks left?
-        isAmphibious = !getAmphibiousAttackTerritories().isEmpty();
-      }
-    }
   }
 
   @Override
@@ -227,6 +211,11 @@ public class MustFightBattle extends DependentBattle
     if (!Properties.getAlliedAirIndependent(gameData.getProperties())) {
       // allied air can not participate in the battle so set transportedBy on each allied air unit
       // and remove them from the attacking units
+      // Note: This is done only for the duration of the battle, so that these dependent planes can
+      // correctly be destroyed if their carrier sinks and so the combat screen shows which planes
+      // are loaded on which carrier when selecting casualties. It's cleared by
+      // clearTransportedByForAlliedAirOnCarrier(). Note: These will also be cleared if the battle
+      // is canceled by virtue of units moving out further.
       final TransportTracker.AlliedAirTransportChange alliedAirTransportChange =
           TransportTracker.markTransportedByForAlliedAirOnCarrier(units, attacker);
       change.add(alliedAirTransportChange.getChange());
@@ -235,7 +224,7 @@ public class MustFightBattle extends DependentBattle
     // mark units with no movement for all but air
     Collection<Unit> nonAir = CollectionUtils.getMatches(attackingUnits, Matches.unitIsNotAir());
     // we don't want to change the movement of transported land units if this is a sea battle
-    // so restrict non air to remove land units
+    // so restrict non-air to remove land units
     if (battleSite.isWater()) {
       nonAir = CollectionUtils.getMatches(nonAir, Matches.unitIsNotLand());
     }
@@ -489,8 +478,7 @@ public class MustFightBattle extends DependentBattle
     isOver = true;
     battleTracker.removeBattle(this, bridge.getData());
 
-    // Must clear transportedby for allied air on carriers for both attacking units and retreating
-    // units
+    // Must clear transportedBy for allied air on carriers for both attacking and retreating units
     final CompositeChange clearAlliedAir =
         TransportTracker.clearTransportedByForAlliedAirOnCarrier(
             attackingUnits, battleSite, attacker, gameData);
@@ -515,22 +503,16 @@ public class MustFightBattle extends DependentBattle
       final IDelegateBridge bridge, final BattleState.Side... sides) {
     for (final Side side : sides) {
       if (side == OFFENSE) {
-        damagedChangeInto(
-            attacker,
-            attackingUnits,
-            CollectionUtils.getMatches(killedDuringCurrentRound, Matches.unitIsOwnedBy(attacker)),
-            bridge,
-            side);
+        Collection<Unit> killed =
+            CollectionUtils.getMatches(killedDuringCurrentRound, Matches.unitIsOwnedBy(attacker));
+        damagedChangeInto(attacker, attackingUnits, killed, bridge, side);
         removeUnits(attackingWaitingToDie, bridge, battleSite, side);
         attackingWaitingToDie.clear();
       } else {
-        damagedChangeInto(
-            defender,
-            defendingUnits,
+        Collection<Unit> killed =
             CollectionUtils.getMatches(
-                killedDuringCurrentRound, Matches.unitIsOwnedBy(attacker).negate()),
-            bridge,
-            side);
+                killedDuringCurrentRound, Matches.unitIsOwnedBy(attacker).negate());
+        damagedChangeInto(defender, defendingUnits, killed, bridge, side);
         removeUnits(defendingWaitingToDie, bridge, battleSite, side);
         defendingWaitingToDie.clear();
       }
@@ -545,7 +527,6 @@ public class MustFightBattle extends DependentBattle
       final Collection<Unit> unitsKilledDuringRound,
       final IDelegateBridge bridge,
       final Side side) {
-
     final List<Unit> unitsThatMightTransform =
         CollectionUtils.getMatches(
             units,
@@ -554,22 +535,17 @@ public class MustFightBattle extends DependentBattle
         CollectionUtils.getMatches(
             unitsKilledDuringRound, Matches.unitAtMaxHitPointDamageChangesInto()));
     final TransformDamagedUnitsHistoryChange transformDamagedUnitsHistoryChange =
-        HistoryChangeFactory.transformDamagedUnits(battleSite, unitsThatMightTransform);
+        HistoryChangeFactory.transformDamagedUnits(battleSite, unitsThatMightTransform, true);
+
     transformDamagedUnitsHistoryChange.perform(bridge);
 
-    cleanupKilledUnits(
-        bridge,
-        side,
-        transformDamagedUnitsHistoryChange.getOldUnits(),
-        transformDamagedUnitsHistoryChange.getNewUnits());
+    // Copy the unit lists to ensure they're serializable for the notification.
+    final var oldUnits = List.copyOf(transformDamagedUnitsHistoryChange.getOldUnits());
+    final var newUnits = List.copyOf(transformDamagedUnitsHistoryChange.getNewUnits());
+    cleanupKilledUnits(bridge, side, oldUnits, newUnits);
     bridge
         .getDisplayChannelBroadcaster()
-        .changedUnitsNotification(
-            battleId,
-            player,
-            transformDamagedUnitsHistoryChange.getOldUnits(),
-            transformDamagedUnitsHistoryChange.getNewUnits(),
-            null);
+        .changedUnitsNotification(battleId, player, oldUnits, newUnits, null);
   }
 
   @Override
@@ -596,8 +572,11 @@ public class MustFightBattle extends DependentBattle
     if (killedUnits.isEmpty()) {
       return;
     }
+    // Note: Ideally we wouldn't have duplicates already, but this should fix the error for now.
+    // See: https://github.com/triplea-game/triplea/issues/11597
+    final var uniqueKilledUnits = new LinkedHashSet<>(killedUnits);
     final RemoveUnitsHistoryChange removeUnitsHistoryChange =
-        HistoryChangeFactory.removeUnitsFromTerritory(battleSite, killedUnits);
+        HistoryChangeFactory.removeUnitsFromTerritory(battleSite, uniqueKilledUnits);
 
     final Collection<Unit> killedUnitsIncludingDependents = removeUnitsHistoryChange.getOldUnits();
     final Collection<Unit> transformedUnits = removeUnitsHistoryChange.getNewUnits();
@@ -680,7 +659,7 @@ public class MustFightBattle extends DependentBattle
       endBattle(WhoWon.ATTACKER, bridge);
       return;
     }
-    stepStrings = determineStepStrings();
+    determineStepStrings();
     final IDisplay display = bridge.getDisplayChannelBroadcaster();
     display.showBattle(
         battleId,
@@ -702,7 +681,7 @@ public class MustFightBattle extends DependentBattle
         List.of());
     display.listBattleSteps(battleId, stepStrings);
     if (!headless) {
-      // take the casualties with least movement first
+      // take the casualties with the least movement first
       CasualtySortingUtil.sortPreBattle(attackingUnits);
       CasualtySortingUtil.sortPreBattle(defendingUnits);
       SoundUtils.playBattleType(attacker, attackingUnits, defendingUnits, bridge);
@@ -805,7 +784,27 @@ public class MustFightBattle extends DependentBattle
 
   @VisibleForTesting
   public List<String> determineStepStrings() {
-    return BattleSteps.builder().battleState(this).battleActions(this).build().get();
+    stepStrings = new ArrayList<>();
+    stepFiringUnits = new HashMap<>();
+    for (var details : BattleSteps.builder().battleState(this).battleActions(this).build().get()) {
+      String stepName = details.getName();
+      stepStrings.add(stepName);
+      if (details.getStep() instanceof SelectCasualties) {
+        SelectCasualties step = (SelectCasualties) details.getStep();
+        // Note: No need to copy since `step` is a temp that won't outlive this call.
+        stepFiringUnits.put(stepName, step.getFiringGroup().getFiringUnits());
+      }
+    }
+    return stepStrings;
+  }
+
+  public Optional<String> findStepNameForFiringUnits(Collection<Unit> firingUnits) {
+    for (final var entry : Optional.ofNullable(stepFiringUnits).orElse(Map.of()).entrySet()) {
+      if (entry.getValue().containsAll(firingUnits)) {
+        return Optional.of(entry.getKey());
+      }
+    }
+    return Optional.empty();
   }
 
   @Override
@@ -821,9 +820,9 @@ public class MustFightBattle extends DependentBattle
         || Properties.getRetreatingUnitsRemainInPlace(gameData.getProperties())) {
       return Set.of(battleSite);
     }
-    // its possible that a sub retreated to a territory we came from, if so we can no longer retreat
-    // there
-    // or if we are moving out of a territory containing enemy units, we cannot retreat back there
+    // it's possible that a sub retreated to a territory we came from, if so we can no longer
+    // retreat there or if we are moving out of a territory containing enemy units, we cannot
+    // retreat back there
     final Predicate<Unit> enemyUnitsThatPreventRetreat =
         PredicateBuilder.of(Matches.enemyUnit(attacker))
             .and(Matches.unitIsNotInfrastructure())
@@ -852,10 +851,10 @@ public class MustFightBattle extends DependentBattle
     }
 
     // the air unit may have come from a conquered or enemy territory, don't allow retreating
-    final Predicate<Territory> conqueuredOrEnemy =
+    final Predicate<Territory> conqueredOrEnemy =
         Matches.isTerritoryEnemyAndNotUnownedWaterOrImpassableOrRestricted(attacker)
             .or(Matches.territoryIsWater().and(Matches.territoryWasFoughtOver(battleTracker)));
-    possible.removeAll(CollectionUtils.getMatches(possible, conqueuredOrEnemy));
+    possible.removeAll(CollectionUtils.getMatches(possible, conqueredOrEnemy));
 
     // the battle site is in the attacking from if sea units are fighting a submerged sub
     possible.remove(battleSite);
@@ -1237,7 +1236,7 @@ public class MustFightBattle extends DependentBattle
   }
 
   /**
-   * Removes non combatants from the requested battle side and returns them
+   * Removes non-combatants from the requested battle side and returns them.
    *
    * @return the removed units
    */
@@ -1261,7 +1260,7 @@ public class MustFightBattle extends DependentBattle
   }
 
   /**
-   * Returns only the relevant non-combatant units present in the specified collection.
+   * Returns only the relevant combatant units present in the specified collection.
    *
    * @return a collection containing all the combatants in units non-combatants include such things
    *     as factories, aa guns, land units in a water battle.
@@ -1272,6 +1271,7 @@ public class MustFightBattle extends DependentBattle
       final boolean attacking,
       final boolean removeForNextRound) {
     int battleRound = (removeForNextRound ? round + 1 : round);
+    // Note: Also done in FiringGroupSplitterGeneral when determining step names. They must match.
     return CollectionUtils.getMatches(
         units,
         Matches.unitCanParticipateInCombat(
@@ -1301,6 +1301,10 @@ public class MustFightBattle extends DependentBattle
                 throw new IllegalStateException(
                     "Round 10,000 reached in a battle. Something must be wrong."
                         + " Please report this to TripleA.\n"
+                        + " Territory: "
+                        + battleSite
+                        + " Attacker: "
+                        + attacker.getName()
                         + " Attacking unit types: "
                         + attackingUnits.stream()
                             .map(Unit::getType)
@@ -1316,7 +1320,7 @@ public class MustFightBattle extends DependentBattle
                             .map(UnitType::getName)
                             .collect(Collectors.joining(",")));
               }
-              stepStrings = determineStepStrings();
+              determineStepStrings();
               final IDisplay display = bridge.getDisplayChannelBroadcaster();
               display.listBattleSteps(battleId, stepStrings);
               // continue fighting the recursive steps
@@ -1336,12 +1340,12 @@ public class MustFightBattle extends DependentBattle
     whoWon = WhoWon.DEFENDER;
     bridge.getDisplayChannelBroadcaster().battleEnd(battleId, defender.getName() + " win");
     if (Properties.getAbandonedTerritoriesMayBeTakenOverImmediately(gameData.getProperties())) {
-      if (CollectionUtils.countMatches(defendingUnits, Matches.unitIsNotInfrastructure()) == 0) {
+      if (defendingUnits.stream().noneMatch(Matches.unitIsNotInfrastructure())) {
         final List<Unit> allyOfAttackerUnits =
             battleSite.getUnitCollection().getMatches(Matches.unitIsNotInfrastructure());
         if (!allyOfAttackerUnits.isEmpty()) {
           final GamePlayer abandonedToPlayer =
-              AbstractBattle.findPlayerWithMostUnits(allyOfAttackerUnits);
+              UnitUtils.findPlayerWithMostUnits(allyOfAttackerUnits);
           bridge
               .getHistoryWriter()
               .addChildToEvent(
@@ -1351,14 +1355,12 @@ public class MustFightBattle extends DependentBattle
                       + " as there are no defenders left",
                   allyOfAttackerUnits);
           // should we create a new battle records to show the ally capturing the territory (in the
-          // case where they
-          // didn't already own/allied it)?
+          // case where they didn't already own/allied it)?
           battleTracker.takeOver(battleSite, abandonedToPlayer, bridge, null, allyOfAttackerUnits);
         }
       } else {
         // should we create a new battle records to show the defender capturing the territory (in
-        // the case where they
-        // didn't already own/allied it)?
+        // the case where they didn't already own/allied it)?
         battleTracker.takeOver(battleSite, defender, bridge, null, defendingUnits);
       }
     }

@@ -37,6 +37,8 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.function.Predicate;
 import javax.annotation.Nullable;
+import lombok.Getter;
+import org.jetbrains.annotations.VisibleForTesting;
 import org.triplea.java.Interruptibles;
 import org.triplea.java.collections.CollectionUtils;
 import org.triplea.java.collections.IntegerMap;
@@ -55,6 +57,8 @@ public class RulesAttachment extends AbstractPlayerRulesAttachment {
   private int techCount = -1;
   // condition for having specific relationships
   private @Nullable List<String> relationship = null;
+  // condition for checking AI player
+  @Getter private @Nullable Boolean isAI = null;
   // condition for being at war
   private @Nullable Set<GamePlayer> atWarPlayers = null;
   private int atWarCount = -1;
@@ -489,6 +493,19 @@ public class RulesAttachment extends AbstractPlayerRulesAttachment {
     unitPresence = null;
   }
 
+  @VisibleForTesting
+  public void setIsAI(final String s) {
+    isAI = (s == null) ? null : getBool(s);
+  }
+
+  private void setIsAI(final Boolean s) {
+    isAI = s;
+  }
+
+  private void resetIsAI() {
+    isAI = null;
+  }
+
   private int getAtWarCount() {
     return atWarCount;
   }
@@ -735,11 +752,17 @@ public class RulesAttachment extends AbstractPlayerRulesAttachment {
       }
       objectiveMet = checkDirectOwnership(listedTerritories, players);
     }
+    // check for AI controlled player
+    if (objectiveMet && getIsAI() != null) {
+      objectiveMet = checkIsAI(players);
+    }
     // get attached to player
     final GamePlayer playerAttachedTo = (GamePlayer) getAttachedTo();
+    // check for players at war
     if (objectiveMet && !getAtWarPlayers().isEmpty()) {
       objectiveMet = checkAtWar(playerAttachedTo, getAtWarPlayers(), getAtWarCount());
     }
+    // check for techs
     if (objectiveMet && !getTechs().isEmpty()) {
       objectiveMet = checkTechs(playerAttachedTo, data.getTechnologyFrontier());
     }
@@ -916,7 +939,7 @@ public class RulesAttachment extends AbstractPlayerRulesAttachment {
       final GameState data) {
     final Predicate<Territory> predicate =
         t -> {
-          final Collection<Unit> units = t.getUnitCollection().getMatches(unitFilter);
+          final Collection<Unit> units = t.getMatches(unitFilter);
           return !units.isEmpty()
               && checkUnitPresenceByType(t.getData(), units, false).orElse(true);
         };
@@ -935,7 +958,7 @@ public class RulesAttachment extends AbstractPlayerRulesAttachment {
       final GameState data) {
     final Predicate<Territory> predicate =
         t -> {
-          final Collection<Unit> units = t.getUnitCollection().getMatches(unitFilter);
+          final Collection<Unit> units = t.getMatches(unitFilter);
           return units.isEmpty() || checkUnitPresenceByType(t.getData(), units, true).orElse(false);
         };
     return matchTerritories(
@@ -1001,6 +1024,15 @@ public class RulesAttachment extends AbstractPlayerRulesAttachment {
     return numberMet >= getTerritoryCount();
   }
 
+  @VisibleForTesting
+  public boolean checkIsAI(final List<GamePlayer> players) {
+    boolean bcheck = true;
+    for (GamePlayer player : players) {
+      bcheck = (bcheck && (getIsAI() == player.isAi()));
+    }
+    return bcheck;
+  }
+
   private boolean checkAtWar(
       final GamePlayer player, final Set<GamePlayer> enemies, final int count) {
     int found = CollectionUtils.countMatches(enemies, player::isAtWar);
@@ -1045,7 +1077,7 @@ public class RulesAttachment extends AbstractPlayerRulesAttachment {
   }
 
   @Override
-  public MutableProperty<?> getPropertyOrNull(String propertyName) {
+  public @Nullable MutableProperty<?> getPropertyOrNull(String propertyName) {
     switch (propertyName) {
       case "techs":
         return MutableProperty.of(this::setTechs, this::setTechs, this::getTechs, this::resetTechs);
@@ -1057,6 +1089,8 @@ public class RulesAttachment extends AbstractPlayerRulesAttachment {
             this::setRelationship,
             this::getRelationship,
             this::resetRelationship);
+      case "isAI":
+        return MutableProperty.of(this::setIsAI, this::setIsAI, this::getIsAI, this::resetIsAI);
       case "atWarPlayers":
         return MutableProperty.of(
             this::setAtWarPlayers,

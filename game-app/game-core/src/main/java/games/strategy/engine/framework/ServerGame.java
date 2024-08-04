@@ -1,6 +1,7 @@
 package games.strategy.engine.framework;
 
 import static com.google.common.base.Preconditions.checkNotNull;
+import static games.strategy.triplea.Constants.EDIT_MODE;
 
 import games.strategy.engine.GameOverException;
 import games.strategy.engine.data.Change;
@@ -25,6 +26,7 @@ import games.strategy.engine.history.DelegateHistoryWriter;
 import games.strategy.engine.history.Event;
 import games.strategy.engine.history.EventChild;
 import games.strategy.engine.history.HistoryNode;
+import games.strategy.engine.history.HistoryWriter;
 import games.strategy.engine.history.Step;
 import games.strategy.engine.message.ConnectionLostException;
 import games.strategy.engine.message.IRemote;
@@ -39,6 +41,7 @@ import games.strategy.net.INode;
 import games.strategy.net.Messengers;
 import games.strategy.net.websocket.ClientNetworkBridge;
 import games.strategy.triplea.delegate.DiceRoll;
+import games.strategy.triplea.delegate.EditDelegate;
 import games.strategy.triplea.settings.ClientSetting;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -68,7 +71,7 @@ public class ServerGame extends AbstractGame {
 
   private final RandomStats randomStats;
   private IRandomSource randomSource = new PlainRandomSource();
-  private IRandomSource delegateRandomSource;
+  private @Nullable IRandomSource delegateRandomSource;
   private final DelegateExecutionManager delegateExecutionManager = new DelegateExecutionManager();
   @Nullable @Getter private final InGameLobbyWatcherWrapper inGameLobbyWatcher;
   private boolean needToInitialize = true;
@@ -81,6 +84,7 @@ public class ServerGame extends AbstractGame {
    * startgame(...) method from returning.
    */
   private final CountDownLatch delegateExecutionStoppedLatch = new CountDownLatch(1);
+
   /** Has the delegate signaled that delegate execution should stop. */
   private volatile boolean delegateExecutionStopped = false;
 
@@ -116,13 +120,17 @@ public class ServerGame extends AbstractGame {
     this.clientNetworkBridge = clientNetworkBridge;
     this.launchAction = launchAction;
     this.inGameLobbyWatcher = inGameLobbyWatcher;
+    // Keep a ref to the history writer. This not only makes the calls below more concise, but also
+    // prevents a need to grab the lock on gameData (as its history object can get reset temporarily
+    // during game cloning operations for the battle calculator, e.g. by AIs).
+    final HistoryWriter historyWriter = gameData.getHistory().getHistoryWriter();
     gameModifiedChannel =
         new IGameModifiedChannel() {
           @Override
           public void gameDataChanged(final Change change) {
             assertCorrectCaller();
             gameData.performChange(change);
-            gameData.getHistory().getHistoryWriter().addChange(change);
+            historyWriter.addChange(change);
           }
 
           private void assertCorrectCaller() {
@@ -142,21 +150,18 @@ public class ServerGame extends AbstractGame {
           @Override
           public void startHistoryEvent(final String event) {
             assertCorrectCaller();
-            gameData.getHistory().getHistoryWriter().startEvent(event);
+            historyWriter.startEvent(event);
           }
 
           @Override
           public void addChildToEvent(final String text, final Object renderingData) {
             assertCorrectCaller();
-            gameData
-                .getHistory()
-                .getHistoryWriter()
-                .addChildToEvent(new EventChild(text, renderingData));
+            historyWriter.addChildToEvent(new EventChild(text, renderingData));
           }
 
           void setRenderingData(final Object renderingData) {
             assertCorrectCaller();
-            gameData.getHistory().getHistoryWriter().setRenderingData(renderingData);
+            historyWriter.setRenderingData(renderingData);
           }
 
           @Override
@@ -171,10 +176,7 @@ public class ServerGame extends AbstractGame {
             if (loadedFromSavedGame) {
               return;
             }
-            gameData
-                .getHistory()
-                .getHistoryWriter()
-                .startNextStep(stepName, delegateName, player, displayName);
+            historyWriter.startNextStep(stepName, delegateName, player, displayName);
           }
 
           // nothing to do, we call this
@@ -402,6 +404,14 @@ public class ServerGame extends AbstractGame {
       delegateExecutionManager.resumeDelegateExecution();
     }
     gameData.getGameLoader().shutDown();
+    // if this is a bot, shut down the bot. We will rely on systemctl to restart the bot
+    // instance. This restart will help us pick up any new maps and/or new bot versions.
+    if (GameRunner.headless() && GameRunner.exitOnEndGame()) {
+      if (inGameLobbyWatcher != null) {
+        inGameLobbyWatcher.shutDown();
+      }
+      ExitStatus.SUCCESS.exit();
+    }
   }
 
   private void autoSaveBefore(final IDelegate delegate) {
@@ -466,6 +476,15 @@ public class ServerGame extends AbstractGame {
           gameData.getSequence().getRound() % 2 == 0
               ? launchAction.getAutoSaveFileUtils().getEvenRoundAutoSaveFile()
               : launchAction.getAutoSaveFileUtils().getOddRoundAutoSaveFile());
+    }
+    // Turn off Edit Mode if we're transitioning to an AI player to prevent infinite round combats.
+    if (EditDelegate.getEditMode(gameData.getProperties())) {
+      GamePlayer newPlayer = gameData.getSequence().getStep().getPlayerId();
+      if (newPlayer != null && newPlayer.isAi() && !newPlayer.equals(currentStep.getPlayerId())) {
+        String text = "Turning off Edit Mode when switching to AI player";
+        gameData.getHistory().getHistoryWriter().startEvent(text);
+        gameData.getProperties().set(EDIT_MODE, false);
+      }
     }
     if (!isMoveStep && shouldAutoSaveAfterEnd(currentDelegate)) {
       autoSaveAfter(currentDelegate);
@@ -562,8 +581,7 @@ public class ServerGame extends AbstractGame {
     // do any initialization of game data for all players here (not based on a delegate, and should
     // not be)
     // we cannot do this the very first run through, because there are no history nodes yet. We
-    // should do after first
-    // node is created.
+    // should do after first node is created.
     if (needToInitialize) {
       addPlayerTypesToGameData(gamePlayers.values(), playerManager, bridge);
     }
@@ -613,14 +631,21 @@ public class ServerGame extends AbstractGame {
         .stepChanged(stepName, delegateName, gamePlayer, round, displayName, loadedFromSavedGame);
   }
 
+  private String isOrAre(String playerName) {
+    if (playerName.endsWith("s") || playerName.endsWith("ese") || playerName.endsWith("ish")) {
+      return "are";
+    } else {
+      return "is";
+    }
+  }
+
   private void addPlayerTypesToGameData(
       final Collection<Player> localPlayers,
       final PlayerManager allPlayers,
       final IDelegateBridge bridge) {
     final GameData data = bridge.getData();
     // potential bugs with adding changes to a game that has not yet started and has no history
-    // nodes yet. So wait for
-    // the first delegate to start before making changes.
+    // nodes yet. So wait for the first delegate to start before making changes.
     if (getCurrentStep() == null || getCurrentStep().getPlayerId() == null || firstRun) {
       firstRun = false;
       return;
@@ -635,21 +660,16 @@ public class ServerGame extends AbstractGame {
     final CompositeChange change = new CompositeChange();
     final Set<String> allPlayersString = allPlayers.getPlayers();
     bridge.getHistoryWriter().startEvent("Game Loaded");
+    final var historyWriter = bridge.getHistoryWriter();
     for (final Player player : localPlayers) {
       allPlayersString.remove(player.getName());
-      final boolean isAi = player.isAi();
-      bridge
-          .getHistoryWriter()
-          .addChildToEvent(
-              player.getName()
-                  + ((player.getName().endsWith("s")
-                          || player.getName().endsWith("ese")
-                          || player.getName().endsWith("ish"))
-                      ? " are"
-                      : " is")
-                  + " now being played by: "
-                  + player.getPlayerLabel());
+      historyWriter.addChildToEvent(
+          String.format(
+              "%s %s now being played by: %s",
+              player.getName(), isOrAre(player.getName()), player.getPlayerLabel()));
+
       final GamePlayer p = data.getPlayerList().getPlayerId(player.getName());
+      final boolean isAi = player.isAi();
       final String newWhoAmI = (isAi ? "AI" : "Human") + ":" + player.getPlayerLabel();
       if (!p.getWhoAmI().equals(newWhoAmI)) {
         change.add(ChangeFactory.changePlayerWhoAmIChange(p, newWhoAmI));
@@ -659,14 +679,8 @@ public class ServerGame extends AbstractGame {
     while (playerIter.hasNext()) {
       final String player = playerIter.next();
       playerIter.remove();
-      bridge
-          .getHistoryWriter()
-          .addChildToEvent(
-              player
-                  + ((player.endsWith("s") || player.endsWith("ese") || player.endsWith("ish"))
-                      ? " are"
-                      : " is")
-                  + " now being played by: Human:Client");
+      historyWriter.addChildToEvent(
+          String.format("%s %s now being played by: Human:Client", player, isOrAre(player)));
       final GamePlayer p = data.getPlayerList().getPlayerId(player);
       final String newWhoAmI = "Human:Client";
       if (!p.getWhoAmI().equals(newWhoAmI)) {
@@ -706,7 +720,7 @@ public class ServerGame extends AbstractGame {
   public void stopGameSequence(final String status, final String title) {
     delegateExecutionStopped =
         launchAction.promptGameStop(
-            status, title, getResourceLoader().getAssetPaths().stream().findAny().orElseThrow());
+            status, title, getResourceLoader().getAssetPaths().stream().findAny().orElse(null));
   }
 
   public boolean isGameSequenceRunning() {

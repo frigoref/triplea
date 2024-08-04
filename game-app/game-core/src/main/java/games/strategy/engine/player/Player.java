@@ -15,6 +15,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import javax.annotation.Nullable;
 import org.triplea.java.ChangeOnNextMajorRelease;
 import org.triplea.java.RemoveOnNextMajorRelease;
 import org.triplea.java.collections.IntegerMap;
@@ -233,6 +234,7 @@ public interface Player extends IRemote {
    * @param battleId - the battle
    * @param submerge - is submerging possible (means the retreat territory CAN be the current battle
    *     territory)
+   * @param battleTerritory - where the battle is taking place
    * @param possibleTerritories - where the player can retreat to
    * @param message - user displayable message
    * @return the territory to retreat to, or null if the player doesnt wish to retreat
@@ -283,6 +285,7 @@ public interface Player extends IRemote {
 
   /** Asks the player if they wish to perform any kamikaze suicide attacks. */
   @RemoteActionCode(21)
+  @Nullable
   Map<Territory, Map<Unit, IntegerMap<Resource>>> selectKamikazeSuicideAttacks(
       Map<Territory, Collection<Unit>> possibleUnitsToAttack);
 

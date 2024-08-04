@@ -103,7 +103,8 @@ public class MovePerformer implements Serializable {
                 final Route routeUnitUsedToMove =
                     moveDelegate.getRouteUsedToMoveInto(unit, route.getStart());
                 if (battle != null) {
-                  battle.removeAttack(routeUnitUsedToMove, Set.of(unit));
+                  Change change = battle.removeAttack(routeUnitUsedToMove, Set.of(unit));
+                  bridge.addChange(change);
                 }
               }
             }
@@ -145,8 +146,8 @@ public class MovePerformer implements Serializable {
 
           @Override
           public void execute(final ExecutionStack stack, final IDelegateBridge bridge) {
-            // if any non enemy territories on route or if any enemy units on route the battles
-            // on (note water could have enemy but its not owned)
+            // if any non-enemy territories on route or if any enemy units on route the battles
+            // on (note water could have enemy, but it's not owned)
             final GameData data = bridge.getData();
             final Predicate<Territory> mustFightThrough = getMustFightThroughMatch(gamePlayer);
             final Collection<Unit> arrived =
@@ -175,7 +176,7 @@ public class MovePerformer implements Serializable {
               boolean ignoreBattle = false;
               // could it be a bombing raid
               final Collection<Unit> enemyUnits =
-                  route.getEnd().getUnitCollection().getMatches(Matches.enemyUnit(gamePlayer));
+                  route.getEnd().getMatches(Matches.enemyUnit(gamePlayer));
               final Collection<Unit> enemyTargetsTotal =
                   CollectionUtils.getMatches(
                       enemyUnits,
@@ -206,7 +207,7 @@ public class MovePerformer implements Serializable {
               // if it's all bombers and there's something to bomb
               if (allCanBomb && targetsOrEscort && GameStepPropertiesHelper.isCombatMove(data)) {
                 final boolean bombing = getRemotePlayer().shouldBomberBomb(route.getEnd());
-                // if bombing and there's something to target- ask what to bomb
+                // if bombing and there's something to target - ask what to bomb
                 if (bombing) {
                   // CompositeMatchOr<Unit> unitsToBeBombed = new
                   // CompositeMatchOr<Unit>(Matches.UnitIsFactory,
@@ -353,7 +354,7 @@ public class MovePerformer implements Serializable {
               unit, moved.add(unit.getAlreadyMoved()), Unit.ALREADY_MOVED));
     }
     // if neutrals were taken over mark land units with 0 movement
-    // if entered a non blitzed conquered territory, mark with 0 movement
+    // if entered a non-blitzed conquered territory, mark with 0 movement
     if (GameStepPropertiesHelper.isCombatMove(data)
         && (!MoveDelegate.getEmptyNeutral(route).isEmpty() || hasConqueredNonBlitzed(route))) {
       for (final Unit unit : CollectionUtils.getMatches(units, Matches.unitIsLand())) {
@@ -385,10 +386,13 @@ public class MovePerformer implements Serializable {
     final boolean paratroopsLanding =
         arrived.stream().anyMatch(paratroopNAirTransports)
             && MoveValidator.allLandUnitsAreBeingParatroopered(arrived);
-    final Map<Unit, Collection<Unit>> dependentAirTransportableUnits =
-        new HashMap<>(
-            MoveValidator.getDependents(
-                CollectionUtils.getMatches(arrived, Matches.unitCanTransport())));
+    final Map<Unit, Collection<Unit>> dependentAirTransportableUnits = new HashMap<>();
+    for (final Unit unit : arrived) {
+      Unit transport = unit.getTransportedBy();
+      if (transport != null) {
+        dependentAirTransportableUnits.computeIfAbsent(transport, u -> new ArrayList<>()).add(unit);
+      }
+    }
     // add newly created dependents
     for (final Entry<Unit, Collection<Unit>> entry : airTransportDependents.entrySet()) {
       Collection<Unit> dependents = dependentAirTransportableUnits.get(entry.getKey());
@@ -401,20 +405,12 @@ public class MovePerformer implements Serializable {
       dependentAirTransportableUnits.put(entry.getKey(), dependents);
     }
 
-    // If paratroops moved normally (within their normal movement) remove their dependency to the
-    // airTransports
-    // So they can all continue to move normally
-    if (!paratroopsLanding && !dependentAirTransportableUnits.isEmpty()) {
-      final Collection<Unit> airTransports =
-          CollectionUtils.getMatches(arrived, Matches.unitIsAirTransport());
-      airTransports.addAll(dependentAirTransportableUnits.keySet());
-    }
     // load the transports
     if (route.isLoad() || paratroopsLanding) {
       // mark transports as having transported
       for (final Unit load : transporting.keySet()) {
         final Unit transport = transporting.get(load);
-        if (!transport.getTransporting().contains(load)) {
+        if (!transport.equals(load.getTransportedBy())) {
           final Change change = TransportTracker.loadTransportChange(transport, load);
           currentMove.addChange(change);
           currentMove.load(transport);

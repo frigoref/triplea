@@ -20,7 +20,6 @@ import games.strategy.triplea.attachments.ICondition;
 import games.strategy.triplea.attachments.TechAbilityAttachment;
 import games.strategy.triplea.attachments.TerritoryAttachment;
 import games.strategy.triplea.attachments.TriggerAttachment;
-import games.strategy.triplea.attachments.UnitAttachment;
 import games.strategy.triplea.attachments.UnitTypeComparator;
 import games.strategy.triplea.delegate.remote.IAbstractForumPosterDelegate;
 import games.strategy.triplea.delegate.remote.IPurchaseDelegate;
@@ -37,6 +36,8 @@ import java.util.Set;
 import java.util.TreeSet;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
+import javax.annotation.Nullable;
+import lombok.Getter;
 import org.triplea.java.collections.CollectionUtils;
 import org.triplea.java.collections.IntegerMap;
 
@@ -52,6 +53,7 @@ public class PurchaseDelegate extends BaseTripleADelegate
       Comparator.comparing(o -> (UnitType) o.getAnyResultKey(), new UnitTypeComparator());
 
   private boolean needToInitialize = true;
+  @Getter private @Nullable IntegerMap<ProductionRule> pendingProductionRules;
 
   @Override
   public void start() {
@@ -102,6 +104,7 @@ public class PurchaseDelegate extends BaseTripleADelegate
   @Override
   public void end() {
     super.end();
+    pendingProductionRules = null;
     needToInitialize = true;
   }
 
@@ -110,6 +113,7 @@ public class PurchaseDelegate extends BaseTripleADelegate
     final PurchaseExtendedDelegateState state = new PurchaseExtendedDelegateState();
     state.superState = super.saveState();
     state.needToInitialize = needToInitialize;
+    state.pendingProductionRules = pendingProductionRules;
     return state;
   }
 
@@ -118,6 +122,7 @@ public class PurchaseDelegate extends BaseTripleADelegate
     final PurchaseExtendedDelegateState s = (PurchaseExtendedDelegateState) state;
     super.loadState(s.superState);
     needToInitialize = s.needToInitialize;
+    pendingProductionRules = s.pendingProductionRules;
   }
 
   @Override
@@ -157,7 +162,7 @@ public class PurchaseDelegate extends BaseTripleADelegate
   }
 
   @Override
-  public String purchase(final IntegerMap<ProductionRule> productionRules) {
+  public @Nullable String purchase(final IntegerMap<ProductionRule> productionRules) {
     final IntegerMap<Resource> costs = getCosts(productionRules);
     final IntegerMap<NamedAttachable> results = getResults(productionRules);
     if (!canAfford(costs, player)) {
@@ -168,8 +173,7 @@ public class PurchaseDelegate extends BaseTripleADelegate
       if (!(next instanceof Resource)) {
         final UnitType type = (UnitType) next;
         final int quantity = results.getInt(type);
-        final UnitAttachment ua = type.getUnitAttachment();
-        final int maxBuilt = ua.getMaxBuiltPerPlayer();
+        final int maxBuilt = type.getUnitAttachment().getMaxBuiltPerPlayer();
         if (maxBuilt == 0) {
           return "May not build any of this unit right now: " + type.getName();
         } else if (maxBuilt > 0) {
@@ -178,20 +182,16 @@ public class PurchaseDelegate extends BaseTripleADelegate
 
           final Predicate<Unit> unitTypeOwnedBy =
               Matches.unitIsOfType(type).and(Matches.unitIsOwnedBy(player));
-          final Collection<Territory> allTerrs = getData().getMap().getTerritories();
-          for (final Territory t : allTerrs) {
+          for (final Territory t : getData().getMap().getTerritories()) {
             currentlyBuilt += t.getUnitCollection().countMatches(unitTypeOwnedBy);
           }
 
-          final int allowedBuild = maxBuilt - currentlyBuilt;
-          if (allowedBuild - quantity < 0) {
-            return "May only build "
-                + allowedBuild
-                + " of "
-                + type.getName()
-                + " this turn, may only build "
-                + maxBuilt
-                + " total";
+          // Use Math.max(0, ...) to avoid negative if existing count exceeds limit.
+          final int allowedBuild = Math.max(0, maxBuilt - currentlyBuilt);
+          if (quantity > allowedBuild) {
+            return String.format(
+                "May only build %s of %s this turn, may only build %s total",
+                allowedBuild, type.getName(), maxBuilt);
           }
         }
       }
@@ -251,7 +251,7 @@ public class PurchaseDelegate extends BaseTripleADelegate
   }
 
   @Override
-  public String purchaseRepair(final Map<Unit, IntegerMap<RepairRule>> repairRules) {
+  public @Nullable String purchaseRepair(final Map<Unit, IntegerMap<RepairRule>> repairRules) {
     final IntegerMap<Resource> costs = getRepairCosts(repairRules, player);
     if (!canAfford(costs, player)) {
       return NOT_ENOUGH_RESOURCES;
@@ -384,6 +384,11 @@ public class PurchaseDelegate extends BaseTripleADelegate
       changes.add(change);
     }
     return returnString.toString();
+  }
+
+  public void setPendingProductionRules(
+      @Nullable IntegerMap<ProductionRule> pendingProductionRules) {
+    this.pendingProductionRules = pendingProductionRules;
   }
 
   @Override

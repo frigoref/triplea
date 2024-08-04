@@ -7,11 +7,13 @@ import games.strategy.engine.data.GameData;
 import games.strategy.engine.data.GamePlayer;
 import games.strategy.engine.data.Resource;
 import games.strategy.engine.data.Territory;
+import games.strategy.engine.data.Unit;
 import games.strategy.engine.data.UnitType;
 import games.strategy.triplea.Constants;
 import games.strategy.triplea.attachments.TechAttachment;
 import games.strategy.triplea.settings.AbstractClientSettingTestCase;
 import games.strategy.triplea.xml.TestMapGameData;
+import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 
 /**
@@ -34,6 +36,8 @@ public abstract class AbstractDelegateTestCase extends AbstractClientSettingTest
   protected Territory sfeSeaZone = gameData.getMap().getTerritory("Soviet Far East Sea Zone");
   protected Territory brazil = gameData.getMap().getTerritory("Brazil");
   protected Territory westCanada = gameData.getMap().getTerritory("West Canada");
+  protected Territory eastCanada = gameData.getMap().getTerritory("East Canada");
+  protected Territory westCanadaSeaZone = gameData.getMap().getTerritory("West Canada Sea Zone");
   protected Territory germany = gameData.getMap().getTerritory("Germany");
   protected Territory syria = gameData.getMap().getTerritory("Syria Jordan");
   protected Territory manchuria = gameData.getMap().getTerritory("Manchuria");
@@ -81,6 +85,7 @@ public abstract class AbstractDelegateTestCase extends AbstractClientSettingTest
   protected UnitType aaGun = GameDataTestUtil.aaGun(gameData);
   protected UnitType fighter = GameDataTestUtil.fighter(gameData);
   protected UnitType bomber = GameDataTestUtil.bomber(gameData);
+  protected UnitType battleship = GameDataTestUtil.battleship(gameData);
   protected UnitType carrier = GameDataTestUtil.carrier(gameData);
   protected Resource pus = gameData.getResourceList().getResource("PUs");
 
@@ -92,6 +97,12 @@ public abstract class AbstractDelegateTestCase extends AbstractClientSettingTest
     addTechAttachment(japanese);
     addTechAttachment(russians);
     addTechAttachment(germans);
+  }
+
+  protected List<Unit> create(GamePlayer player, UnitType unitType, int quantity) {
+    var units = unitType.create(quantity, player);
+    player.getUnitCollection().addAll(units);
+    return units;
   }
 
   private void addTechAttachment(final GamePlayer player) {

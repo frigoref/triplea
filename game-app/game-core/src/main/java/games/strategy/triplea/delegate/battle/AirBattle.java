@@ -85,27 +85,26 @@ public class AirBattle extends AbstractBattle {
     // fill in defenders
     if (isBombingRun) {
       defendingUnits =
-          battleSite
-              .getUnitCollection()
-              .getMatches(defendingBombingRaidInterceptors(battleSite, attacker, gameData));
+          battleSite.getMatches(defendingBombingRaidInterceptors(battleSite, attacker, gameData));
     } else {
       defendingUnits =
-          battleSite
-              .getUnitCollection()
-              .getMatches(defendingGroundSeaBattleInterceptors(attacker, gameData));
+          battleSite.getMatches(defendingGroundSeaBattleInterceptors(attacker, gameData));
     }
   }
 
   @Override
   public Change addAttackChange(
       final Route route, final Collection<Unit> units, final Map<Unit, Set<Unit>> targets) {
-    attackingUnits.addAll(units);
+    // Avoid duplicates. Note: This is needed as scrambling code calls addAirBattle(), but the
+    // battle may have already been created with the same attackers. They should not be added twice.
+    units.stream().filter(not(attackingUnits::contains)).forEach(attackingUnits::add);
     return ChangeFactory.EMPTY_CHANGE;
   }
 
   @Override
-  public void removeAttack(final Route route, final Collection<Unit> units) {
+  public Change removeAttack(final Route route, final Collection<Unit> units) {
     attackingUnits.removeAll(units);
+    return new CompositeChange();
   }
 
   @Override
@@ -251,7 +250,9 @@ public class AirBattle extends AbstractBattle {
           @Override
           public void execute(final ExecutionStack stack, final IDelegateBridge bridge) {
             if (!isOver && canAttackerRetreat()) {
-              attackerRetreat(bridge);
+              // planes retreat to the same square the battle is in, and then should move during
+              // non combat to their landing site, or be scrapped if they can't find one.
+              queryRetreat(false, bridge, battleSite);
             }
           }
         });
@@ -262,7 +263,9 @@ public class AirBattle extends AbstractBattle {
           @Override
           public void execute(final ExecutionStack stack, final IDelegateBridge bridge) {
             if (!isOver && canDefenderRetreat()) {
-              defenderRetreat(bridge);
+              // planes retreat to the same square the battle is in, and then should move during
+              // non combat to their landing site, or be scrapped if they can't find one
+              queryRetreat(true, bridge, battleSite);
             }
           }
         });
@@ -335,26 +338,21 @@ public class AirBattle extends AbstractBattle {
       recordUnitsWereInAirBattle(attackingUnits, bridge);
       recordUnitsWereInAirBattle(defendingUnits, bridge);
     }
-    // so as of right now, Air Battles are created before both normal battles and strategic bombing
-    // raids
-    // once completed, the air battle will create a strategic bombing raid, if that is the purpose
-    // of those aircraft
-    // however, if the purpose is a normal battle, it will have already been created by the battle
-    // tracker / combat move
-    // so we do not have to create normal battles, only bombing raids
-    // setup new battle here
+    // As of right now, Air Battles are created before both normal battles and strategic bombing
+    // raids. Once completed, the air battle will create a strategic bombing raid, if that is the
+    // purpose of those aircraft. However, if the purpose is a normal battle, it will have already
+    // been created by the battle tracker / combat move.
+    // So we do not have to create normal battles, only bombing raids setup new battle here.
     if (isBombingRun) {
       final Collection<Unit> bombers =
           CollectionUtils.getMatches(attackingUnits, Matches.unitIsStrategicBomber());
       if (!bombers.isEmpty()) {
         Map<Unit, Set<Unit>> targets = null;
         final Collection<Unit> enemyTargetsTotal =
-            battleSite
-                .getUnitCollection()
-                .getMatches(
-                    Matches.enemyUnit(bridge.getGamePlayer())
-                        .and(Matches.unitCanBeDamaged())
-                        .and(Matches.unitIsBeingTransported().negate()));
+            battleSite.getMatches(
+                Matches.enemyUnit(bridge.getGamePlayer())
+                    .and(Matches.unitCanBeDamaged())
+                    .and(Matches.unitIsBeingTransported().negate()));
         for (final Unit unit : bombers) {
           final Collection<Unit> enemyTargets =
               CollectionUtils.getMatches(
@@ -473,79 +471,53 @@ public class AirBattle extends AbstractBattle {
     battleTracker.removeBattle(AirBattle.this, bridge.getData());
   }
 
-  private void attackerRetreat(final IDelegateBridge bridge) {
-    // planes retreat to the same square the battle is in, and then should
-    // move during non combat to their landing site, or be scrapped if they can't find one.
-    // retreat planes
-    if (!attackingUnits.isEmpty()) {
-      queryRetreat(false, bridge, Set.of(battleSite));
-    }
-  }
-
-  private void defenderRetreat(final IDelegateBridge bridge) {
-    // planes retreat to the same square the battle is in, and then should
-    // move during non combat to their landing site, or be scrapped if they can't find one.
-    // retreat planes
-    if (!defendingUnits.isEmpty()) {
-      queryRetreat(true, bridge, Set.of(battleSite));
-    }
-  }
-
   private void queryRetreat(
-      final boolean defender,
-      final IDelegateBridge bridge,
-      final Collection<Territory> availableTerritories) {
-    if (availableTerritories.isEmpty()) {
-      return;
-    }
+      final boolean defender, final IDelegateBridge bridge, final Territory battleSite) {
     final Collection<Unit> units =
         defender ? new ArrayList<>(defendingUnits) : new ArrayList<>(attackingUnits);
     if (units.isEmpty()) {
       return;
     }
-    final GamePlayer retreatingPlayer = defender ? this.defender : attacker;
-    final String text = retreatingPlayer.getName() + " retreat?";
     final String step = defender ? DEFENDERS_WITHDRAW : ATTACKERS_WITHDRAW;
-
     if (ClientSetting.useWebsocketNetwork.getValue().orElse(false)) {
       bridge.sendMessage(new IDisplay.GoToBattleStepMessage(battleId.toString(), step));
     } else {
       bridge.getDisplayChannelBroadcaster().gotoBattleStep(battleId, step);
     }
+
+    final GamePlayer retreatingPlayer = defender ? this.defender : attacker;
+    final String text = retreatingPlayer.getName() + " retreat?";
     final Territory retreatTo =
         getRemote(retreatingPlayer, bridge)
-            .retreatQuery(battleId, false, battleSite, availableTerritories, text);
-    if (retreatTo != null && !availableTerritories.contains(retreatTo)) {
-      log.error(
-          "Invalid retreat selection :"
-              + retreatTo
-              + " not in "
-              + MyFormatter.defaultNamedToTextList(availableTerritories));
+            .retreatQuery(battleId, false, battleSite, List.of(battleSite), text);
+    if (retreatTo == null) {
       return;
     }
-    if (retreatTo != null) {
-      if (!headless) {
-        bridge
-            .getSoundChannelBroadcaster()
-            .playSoundForAll(SoundPath.CLIP_BATTLE_RETREAT_AIR, attacker);
-      }
-      retreat(units, defender, bridge);
-      final String messageShort = retreatingPlayer.getName() + " retreats";
-      final String messageLong =
-          retreatingPlayer.getName() + " retreats all units to " + retreatTo.getName();
-      if (ClientSetting.useWebsocketNetwork.getValue().orElse(false)) {
-        bridge.sendMessage(
-            IDisplay.NotifyRetreatMessage.builder()
-                .shortMessage(messageShort)
-                .message(messageLong)
-                .step(step)
-                .retreatingPlayerName(retreatingPlayer.getName())
-                .build());
-      } else {
-        bridge
-            .getDisplayChannelBroadcaster()
-            .notifyRetreat(messageShort, messageLong, step, retreatingPlayer);
-      }
+    if (!retreatTo.equals(battleSite)) {
+      log.error("Invalid retreat selection : {} does not equal {}", retreatTo, battleSite);
+      return;
+    }
+    if (!headless) {
+      bridge
+          .getSoundChannelBroadcaster()
+          .playSoundForAll(SoundPath.CLIP_BATTLE_RETREAT_AIR, attacker);
+    }
+    retreat(units, defender, bridge);
+    final String messageShort = retreatingPlayer.getName() + " retreats";
+    final String messageLong =
+        retreatingPlayer.getName() + " retreats all units to " + retreatTo.getName();
+    if (ClientSetting.useWebsocketNetwork.getValue().orElse(false)) {
+      bridge.sendMessage(
+          IDisplay.NotifyRetreatMessage.builder()
+              .shortMessage(messageShort)
+              .message(messageLong)
+              .step(step)
+              .retreatingPlayerName(retreatingPlayer.getName())
+              .build());
+    } else {
+      bridge
+          .getDisplayChannelBroadcaster()
+          .notifyRetreat(messageShort, messageLong, step, retreatingPlayer);
     }
   }
 
@@ -597,9 +569,7 @@ public class AirBattle extends AbstractBattle {
       return Integer.MAX_VALUE;
     }
     int result = 0;
-    for (final Unit base :
-        t.getUnitCollection()
-            .getMatches(Matches.unitIsAirBase().and(Matches.unitIsNotDisabled()))) {
+    for (final Unit base : t.getMatches(Matches.unitIsAirBase().and(Matches.unitIsNotDisabled()))) {
       final int baseMax = base.getUnitAttachment().getMaxInterceptCount();
       if (baseMax == -1) {
         return Integer.MAX_VALUE;

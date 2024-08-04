@@ -7,19 +7,13 @@ import games.strategy.engine.data.GamePlayer;
 import games.strategy.engine.data.GameState;
 import games.strategy.engine.data.MutableProperty;
 import games.strategy.engine.data.Resource;
-import games.strategy.engine.data.Territory;
-import games.strategy.engine.data.Unit;
 import games.strategy.engine.data.UnitType;
 import games.strategy.engine.data.gameparser.GameParseException;
-import games.strategy.triplea.delegate.Matches;
-import java.util.ArrayList;
-import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
-import java.util.function.Predicate;
 import javax.annotation.Nullable;
-import org.triplea.java.collections.CollectionUtils;
+import lombok.Getter;
 import org.triplea.java.collections.IntegerMap;
 import org.triplea.util.Triple;
 
@@ -31,11 +25,11 @@ import org.triplea.util.Triple;
 public class PlayerAttachment extends DefaultAttachment {
   private static final long serialVersionUID = 1880755875866426270L;
 
-  private int vps = 0;
+  @Getter private int vps = 0;
   // need to store some data during a turn
-  private int captureVps = 0;
+  @Getter private int captureVps = 0;
   // number of capitals needed before we lose all our money
-  private int retainCapitalNumber = 1;
+  @Getter private int retainCapitalNumber = 1;
   // number of capitals needed before we lose ability to gain money and produce units
   private int retainCapitalProduceNumber = 1;
   private @Nullable List<GamePlayer> giveUnitControl = null;
@@ -68,7 +62,7 @@ public class PlayerAttachment extends DefaultAttachment {
   }
 
   /** Convenience method. can be null */
-  public static PlayerAttachment get(final GamePlayer p) {
+  public static @Nullable PlayerAttachment get(final GamePlayer p) {
     // allow null
     return p.getPlayerAttachment();
   }
@@ -93,7 +87,7 @@ public class PlayerAttachment extends DefaultAttachment {
     placementLimit = value;
   }
 
-  private Set<Triple<Integer, String, Set<UnitType>>> getPlacementLimit() {
+  public Set<Triple<Integer, String, Set<UnitType>>> getPlacementLimit() {
     return getSetProperty(placementLimit);
   }
 
@@ -112,7 +106,7 @@ public class PlayerAttachment extends DefaultAttachment {
     movementLimit = value;
   }
 
-  private Set<Triple<Integer, String, Set<UnitType>>> getMovementLimit() {
+  public Set<Triple<Integer, String, Set<UnitType>>> getMovementLimit() {
     return getSetProperty(movementLimit);
   }
 
@@ -131,7 +125,7 @@ public class PlayerAttachment extends DefaultAttachment {
     attackingLimit = value;
   }
 
-  private Set<Triple<Integer, String, Set<UnitType>>> getAttackingLimit() {
+  public Set<Triple<Integer, String, Set<UnitType>>> getAttackingLimit() {
     return getSetProperty(attackingLimit);
   }
 
@@ -163,65 +157,6 @@ public class PlayerAttachment extends DefaultAttachment {
       }
     }
     return Triple.of(max, s[1].intern(), types);
-  }
-
-  /**
-   * Returns {@code true} if the specified units can move into the specified territory without
-   * violating the specified stacking limit (movement, attack, or placement).
-   */
-  public static boolean getCanTheseUnitsMoveWithoutViolatingStackingLimit(
-      final String limitType,
-      final Collection<Unit> unitsMoving,
-      final Territory toMoveInto,
-      final GamePlayer owner,
-      final GameState data) {
-    final PlayerAttachment pa = PlayerAttachment.get(owner);
-    if (pa == null) {
-      return true;
-    }
-    final Set<Triple<Integer, String, Set<UnitType>>> stackingLimits;
-    switch (limitType) {
-      case "movementLimit":
-        stackingLimits = pa.getMovementLimit();
-        break;
-      case "attackingLimit":
-        stackingLimits = pa.getAttackingLimit();
-        break;
-      case "placementLimit":
-        stackingLimits = pa.getPlacementLimit();
-        break;
-      default:
-        throw new IllegalStateException("Invalid limitType: " + limitType);
-    }
-    if (stackingLimits.isEmpty()) {
-      return true;
-    }
-    final Predicate<Unit> notOwned = Matches.unitIsOwnedBy(owner).negate();
-    final Predicate<Unit> notAllied = Matches.alliedUnit(owner).negate();
-    for (final Triple<Integer, String, Set<UnitType>> currentLimit : stackingLimits) {
-      // first make a copy of unitsMoving
-      final Collection<Unit> copyUnitsMoving = new ArrayList<>(unitsMoving);
-      final Collection<Unit> currentInTerritory = new ArrayList<>(toMoveInto.getUnits());
-      final String type = currentLimit.getSecond();
-      // first remove units that do not apply to our current type
-      if (type.equals("owned")) {
-        currentInTerritory.removeAll(CollectionUtils.getMatches(currentInTerritory, notOwned));
-        copyUnitsMoving.removeAll(CollectionUtils.getMatches(copyUnitsMoving, notOwned));
-      } else if (type.equals("allied")) {
-        currentInTerritory.removeAll(CollectionUtils.getMatches(currentInTerritory, notAllied));
-        copyUnitsMoving.removeAll(CollectionUtils.getMatches(copyUnitsMoving, notAllied));
-      }
-      // now remove units that are not part of our list
-      final Predicate<Unit> matchesUnits = Matches.unitIsOfTypes(currentLimit.getThird());
-      currentInTerritory.retainAll(CollectionUtils.getMatches(currentInTerritory, matchesUnits));
-      copyUnitsMoving.retainAll(CollectionUtils.getMatches(copyUnitsMoving, matchesUnits));
-      // now test
-      final Integer max = currentLimit.getFirst();
-      if (max < (currentInTerritory.size() + copyUnitsMoving.size())) {
-        return false;
-      }
-    }
-    return true;
   }
 
   private void setSuicideAttackTargets(final String value) throws GameParseException {
@@ -277,20 +212,12 @@ public class PlayerAttachment extends DefaultAttachment {
     vps = value;
   }
 
-  public int getVps() {
-    return vps;
-  }
-
   private void setCaptureVps(final String value) {
     captureVps = getInt(value);
   }
 
   private void setCaptureVps(final Integer value) {
     captureVps = value;
-  }
-
-  public int getCaptureVps() {
-    return captureVps;
   }
 
   private void resetCaptureVps() {
@@ -303,10 +230,6 @@ public class PlayerAttachment extends DefaultAttachment {
 
   private void setRetainCapitalNumber(final Integer value) {
     retainCapitalNumber = value;
-  }
-
-  public int getRetainCapitalNumber() {
-    return retainCapitalNumber;
   }
 
   private void resetRetainCapitalNumber() {
@@ -437,7 +360,7 @@ public class PlayerAttachment extends DefaultAttachment {
   public void validate(final GameState data) {}
 
   @Override
-  public MutableProperty<?> getPropertyOrNull(String propertyName) {
+  public @Nullable MutableProperty<?> getPropertyOrNull(String propertyName) {
     switch (propertyName) {
       case "vps":
         return MutableProperty.ofMapper(

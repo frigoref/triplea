@@ -7,14 +7,15 @@ import games.strategy.engine.data.ProductionRule;
 import games.strategy.engine.data.Territory;
 import games.strategy.engine.data.Unit;
 import games.strategy.engine.data.UnitType;
-import games.strategy.triplea.Constants;
+import games.strategy.engine.data.properties.GameProperties;
+import games.strategy.engine.delegate.IDelegate;
 import games.strategy.triplea.Properties;
 import games.strategy.triplea.UnitUtils;
 import games.strategy.triplea.attachments.RulesAttachment;
 import games.strategy.triplea.delegate.Matches;
+import games.strategy.triplea.delegate.PurchaseDelegate;
 import games.strategy.triplea.formatter.MyFormatter;
 import games.strategy.triplea.ui.panels.map.MapPanel;
-import games.strategy.triplea.util.UnitSeparator;
 import java.awt.event.ActionEvent;
 import java.util.Collection;
 import javax.swing.AbstractAction;
@@ -24,6 +25,7 @@ import javax.swing.JFrame;
 import javax.swing.JLabel;
 import javax.swing.JOptionPane;
 import javax.swing.SwingUtilities;
+import lombok.Setter;
 import org.triplea.java.collections.CollectionUtils;
 import org.triplea.java.collections.IntegerMap;
 import org.triplea.swing.SwingComponents;
@@ -36,13 +38,14 @@ public class PurchasePanel extends ActionPanel {
   private static final String BUY = "Buy...";
   private static final String CHANGE = "Change...";
 
-  private IntegerMap<ProductionRule> purchase;
+  private IntegerMap<ProductionRule> purchase = new IntegerMap<>();
   private boolean bid;
   private final SimpleUnitPanel purchasedPreviousRoundsUnits;
   private final JLabel purchasedPreviousRoundsLabel;
   private final SimpleUnitPanel purchasedUnits;
   private final JLabel purchasedLabel = createIndentedLabel();
   private final JButton buyButton;
+  @Setter private boolean keepCurrentPurchase;
 
   private final AbstractAction purchaseAction =
       new AbstractAction("Buy") {
@@ -52,6 +55,17 @@ public class PurchasePanel extends ActionPanel {
         public void actionPerformed(final ActionEvent e) {
           final GamePlayer player = getCurrentPlayer();
           final GameData data = getData();
+
+          // Restore pending production that was loaded from the save game.
+          // Use the delegate from the step, since it may not actually be named 'purchase'.
+          final IDelegate delegate = data.getSequence().getStep().getDelegate();
+          if (delegate instanceof PurchaseDelegate) {
+            final var savedPurchase = ((PurchaseDelegate) delegate).getPendingProductionRules();
+            if (savedPurchase != null) {
+              purchase = savedPurchase;
+            }
+          }
+
           purchase =
               TabbedProductionPanel.getProduction(
                   player,
@@ -60,6 +74,12 @@ public class PurchasePanel extends ActionPanel {
                   bid,
                   purchase,
                   getMap().getUiContext());
+
+          if (delegate instanceof PurchaseDelegate) {
+            // Set pending production on the PurchaseDelegate for saving the game.
+            ((PurchaseDelegate) delegate).setPendingProductionRules(purchase);
+          }
+
           purchasedUnits.setUnitsFromProductionRuleMap(purchase, player);
           if (purchase.totalValues() == 0) {
             purchasedLabel.setText("");
@@ -86,7 +106,13 @@ public class PurchasePanel extends ActionPanel {
   @Override
   public void display(final GamePlayer gamePlayer) {
     super.display(gamePlayer);
-    purchase = new IntegerMap<>();
+    // If keepCurrentPurchase is true, we're trying after showing an error to the user about their
+    // current selection. Don't clear everything and let the user correct it instead.
+    if (keepCurrentPurchase) {
+      keepCurrentPurchase = false;
+    } else {
+      purchase.clear();
+    }
     SwingUtilities.invokeLater(
         () -> {
           removeAll();
@@ -107,8 +133,7 @@ public class PurchasePanel extends ActionPanel {
           add(SwingComponents.leftBox(purchasedUnits));
 
           try (GameData.Unlocker ignored = getData().acquireReadLock()) {
-            purchasedPreviousRoundsUnits.setUnitsFromCategories(
-                UnitSeparator.categorize(gamePlayer.getUnits()));
+            purchasedPreviousRoundsUnits.setUnits(gamePlayer.getUnits());
             add(Box.createVerticalStrut(4));
             if (!gamePlayer.getUnitCollection().isEmpty()) {
               add(SwingComponents.leftBox(purchasedPreviousRoundsLabel));
@@ -136,18 +161,18 @@ public class PurchasePanel extends ActionPanel {
     }
     // give a warning if the
     // player tries to produce too much
-    if (Properties.getWW2V2(getData().getProperties())
-        || Properties.getPlacementRestrictedByFactory(getData().getProperties())) {
+    final GameData data = getData();
+    final GameProperties properties = data.getProperties();
+    if (Properties.getWW2V2(properties) || Properties.getPlacementRestrictedByFactory(properties)) {
+      final GamePlayer player = getCurrentPlayer();
       int totalProd = 0;
-      try (GameData.Unlocker ignored = getData().acquireReadLock()) {
-        for (final Territory t :
-            CollectionUtils.getMatches(
-                getData().getMap().getTerritories(),
-                Matches.territoryHasOwnedIsFactoryOrCanProduceUnits(getCurrentPlayer()))) {
-          final GameData data = getData();
+      try (GameData.Unlocker ignored = data.acquireReadLock()) {
+        final var predicate = Matches.territoryHasOwnedIsFactoryOrCanProduceUnits(player);
+        final var territories =
+            CollectionUtils.getMatches(data.getMap().getTerritories(), predicate);
+        for (final Territory t : CollectionUtils.getMatches(territories, predicate)) {
           totalProd +=
-              UnitUtils.getProductionPotentialOfTerritory(
-                  t.getUnits(), t, getCurrentPlayer(), data.getProperties(), true, true);
+              UnitUtils.getProductionPotentialOfTerritory(t.getUnits(), t, player, true, true);
         }
       }
       // sum production for all units except factories
@@ -161,7 +186,6 @@ public class PurchasePanel extends ActionPanel {
           }
         }
       }
-      final GamePlayer player = getCurrentPlayer();
       final Collection<Unit> unitsNeedingFactory =
           CollectionUtils.getMatches(player.getUnits(), Matches.unitIsNotConstruction());
       if (!bid
@@ -183,6 +207,11 @@ public class PurchasePanel extends ActionPanel {
           return;
         }
       }
+    }
+    // When closing the panel, clear the pending production.
+    final IDelegate delegate = data.getSequence().getStep().getDelegate();
+    if (delegate instanceof PurchaseDelegate) {
+      ((PurchaseDelegate) delegate).setPendingProductionRules(null);
     }
     release();
   }
@@ -213,8 +242,7 @@ public class PurchasePanel extends ActionPanel {
   }
 
   private static boolean isUnlimitedProduction(final GamePlayer player) {
-    final RulesAttachment ra =
-        (RulesAttachment) player.getAttachment(Constants.RULES_ATTACHMENT_NAME);
+    final RulesAttachment ra = player.getRulesAttachment();
     return ra != null && ra.getUnlimitedProduction();
   }
 

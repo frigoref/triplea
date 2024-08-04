@@ -1,5 +1,8 @@
 package games.strategy.engine.chat;
 
+import games.strategy.engine.framework.startup.mc.messages.ModeratorPromoted;
+import games.strategy.net.IMessageListener;
+import games.strategy.net.INode;
 import games.strategy.triplea.settings.ClientSetting;
 import java.awt.BorderLayout;
 import java.awt.Container;
@@ -7,6 +10,7 @@ import java.awt.Insets;
 import java.awt.event.KeyEvent;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseListener;
+import java.io.Serializable;
 import javax.swing.Action;
 import javax.swing.BoundedRangeModel;
 import javax.swing.InputMap;
@@ -22,6 +26,7 @@ import javax.swing.text.BadLocationException;
 import javax.swing.text.Document;
 import javax.swing.text.SimpleAttributeSet;
 import javax.swing.text.StyleConstants;
+import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.triplea.domain.data.UserName;
 import org.triplea.java.DateTimeUtil;
@@ -52,7 +57,7 @@ public class ChatMessagePanel extends JPanel implements ChatMessageListener {
   private JTextField nextMessage;
   private JButton send;
   private JButton setStatus;
-  private Chat chat;
+  @Getter private Chat chat;
   private final SimpleAttributeSet bold = new SimpleAttributeSet();
   private final SimpleAttributeSet italic = new SimpleAttributeSet();
   private final SimpleAttributeSet normal = new SimpleAttributeSet();
@@ -79,10 +84,21 @@ public class ChatMessagePanel extends JPanel implements ChatMessageListener {
 
   public ChatMessagePanel(
       final Chat chat, final ChatSoundProfile chatSoundProfile, final ClipPlayer clipPlayer) {
+
     this.chatSoundProfile = chatSoundProfile;
     this.clipPlayer = clipPlayer;
     init();
     setChat(chat);
+
+    chat.addMessengersListener(
+        new IMessageListener() {
+          @Override
+          public void messageReceived(Serializable msg, INode from) {
+            if (msg instanceof ModeratorPromoted) {
+              addGenericMessage("Moderator Promoted: " + ((ModeratorPromoted) msg).getPlayerName());
+            }
+          }
+        });
   }
 
   private void init() {
@@ -115,10 +131,6 @@ public class ChatMessagePanel extends JPanel implements ChatMessageListener {
                     text.setEnabled(false);
                   }
                 }));
-  }
-
-  public Chat getChat() {
-    return chat;
   }
 
   private void layoutComponents() {

@@ -9,7 +9,6 @@ import static games.strategy.engine.framework.CliProperties.TRIPLEA_SERVER;
 
 import games.strategy.engine.ClientFileSystemHelper;
 import games.strategy.engine.auto.update.UpdateChecks;
-import games.strategy.engine.framework.ArgParser;
 import games.strategy.engine.framework.GameShutdownRegistry;
 import games.strategy.engine.framework.I18nResourceBundle;
 import games.strategy.engine.framework.lookandfeel.LookAndFeel;
@@ -68,15 +67,20 @@ public final class HeadedGameRunner {
   }
 
   public static void initializeDesktopIntegrations(final String[] args) {
-    ArgParser.handleCommandLineArgs(args);
+    if ((args.length == 1) && args[0].startsWith("triplea:")) {
+      final String value =
+          URLDecoder.decode(args[0].substring("triplea:".length()), StandardCharsets.UTF_8);
+      System.setProperty(TRIPLEA_MAP_DOWNLOAD, value);
+    } else if ((args.length == 1) && !args[0].contains("=")) {
+      System.setProperty(TRIPLEA_GAME, args[0]);
+    }
 
     if (SystemProperties.isMac()) {
       MacOsIntegration.setOpenUriHandler(
           uri -> {
             final String mapName =
                 URLDecoder.decode(
-                    uri.toString().substring(ArgParser.TRIPLEA_PROTOCOL.length()),
-                    StandardCharsets.UTF_8);
+                    uri.toString().substring("triplea:".length()), StandardCharsets.UTF_8);
             SwingUtilities.invokeLater(
                 () -> DownloadMapsWindow.showDownloadMapsWindowAndDownload(mapName));
           });
@@ -101,10 +105,7 @@ public final class HeadedGameRunner {
 
     LobbyHttpClientConfig.setConfig(
         LobbyHttpClientConfig.builder()
-            .clientVersion(
-                ProductVersionReader.getCurrentVersion().getMajor()
-                    + "."
-                    + ProductVersionReader.getCurrentVersion().getMinor())
+            .clientVersion(ProductVersionReader.getCurrentVersion().toMajorMinorString())
             .systemId(SystemIdLoader.load().getValue())
             .build());
 
@@ -145,7 +146,11 @@ public final class HeadedGameRunner {
           headedServerSetupModel = new HeadedServerSetupModel(gameSelectorModel);
           MainFrame.buildMainFrame(headedServerSetupModel, gameSelectorModel);
           headedServerSetupModel.showSelectType();
-          ThreadRunner.runInNewThread(HeadedGameRunner::showMainFrame);
+          ThreadRunner.runInNewThread(
+              () -> {
+                showMainFrame();
+                gameSelectorModel.setReadyForSaveLoad();
+              });
         });
 
     UpdateChecks.launch();
@@ -153,7 +158,7 @@ public final class HeadedGameRunner {
 
   /**
    * Sets the 'main frame' to visible. In this context the main frame is the initial welcome (launch
-   * lobby/single player game etc..) screen presented to GUI enabled clients.
+   * lobby/single player game etc.) screen presented to GUI enabled clients.
    */
   public static void showMainFrame() {
     GameShutdownRegistry.runShutdownActions();
@@ -172,7 +177,7 @@ public final class HeadedGameRunner {
       final String saveGameFileName = System.getProperty(TRIPLEA_GAME, "");
       if (!saveGameFileName.isEmpty()) {
         final Path saveGameFile = Path.of(saveGameFileName);
-        if (Files.exists(saveGameFile) && !gameSelectorModel.load(saveGameFile)) {
+        if (Files.exists(saveGameFile) && !gameSelectorModel.loadSave(saveGameFile)) {
           // abort launch if we failed to load the specified game
           return;
         }

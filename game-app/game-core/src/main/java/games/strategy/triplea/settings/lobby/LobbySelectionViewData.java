@@ -28,7 +28,7 @@ class LobbySelectionViewData implements ViewData {
   @Getter
   enum LobbyChoice {
     PROD("Latest Stable", () -> UrlConstants.PROD_LOBBY, true),
-    LOCAL("Local", () -> "http://localhost:8080", true),
+    LOCAL("Local", () -> "http://localhost", true),
     OTHER("Other", () -> ClientSetting.lobbyUri.getValueOrThrow().toString(), false);
 
     private final String displayString;
@@ -64,8 +64,10 @@ class LobbySelectionViewData implements ViewData {
 
   /** Which lobby choice radio button is selected eg: prod / local / other */
   @Nonnull LobbyChoice selectedRadioButton;
+
   /** The string text in the uri field. */
   @Nonnull String uriFieldValue;
+
   /** Whether a user can edit the uri field. */
   @Nonnull Boolean uriFieldEnabled;
 

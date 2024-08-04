@@ -24,6 +24,7 @@ import java.awt.Rectangle;
 import java.awt.RenderingHints;
 import java.util.List;
 import java.util.function.Predicate;
+import lombok.Getter;
 
 /**
  * Draws units for the associated territory.
@@ -36,7 +37,7 @@ public class UnitsDrawer extends AbstractDrawable {
   private final int count;
   private final String unitType;
   private final String playerName;
-  private final Point placementPoint;
+  @Getter private final Point placementPoint;
   private final int damaged;
   private final int bombingUnitDamage;
   private final boolean disabled;
@@ -74,10 +75,6 @@ public class UnitsDrawer extends AbstractDrawable {
     this.uiContext = uiContext;
   }
 
-  public Point getPlacementPoint() {
-    return placementPoint;
-  }
-
   public Rectangle getPlacementRectangle() {
     UnitImageFactory factory = uiContext.getUnitImageFactory();
     return new Rectangle(
@@ -97,15 +94,15 @@ public class UnitsDrawer extends AbstractDrawable {
       final GameData data,
       final Graphics2D graphics,
       final MapData mapData) {
-
     // If there are too many Units at one point a black line is drawn to make clear which units
     // belong to where
+    final var factory = uiContext.getUnitImageFactory();
     if (overflow) {
       graphics.setColor(Color.BLACK);
       graphics.fillRect(
           placementPoint.x - bounds.x - 2,
-          placementPoint.y - bounds.y + uiContext.getUnitImageFactory().getUnitImageHeight(),
-          uiContext.getUnitImageFactory().getUnitImageWidth() + 2,
+          placementPoint.y - bounds.y + factory.getUnitImageHeight(),
+          factory.getUnitImageWidth() + 2,
           3);
     }
     final UnitType type = data.getUnitTypeList().getUnitType(unitType);
@@ -123,8 +120,7 @@ public class UnitsDrawer extends AbstractDrawable {
             .disabled(disabled)
             .build();
 
-    final Image img = uiContext.getUnitImageFactory().getImage(imageKey);
-
+    final Image img = factory.getImage(imageKey);
     final int maxRange = new Unit(type, owner, data).getMaxMovementAllowed();
 
     final UnitFlagDrawMode drawMode =
@@ -134,12 +130,12 @@ public class UnitsDrawer extends AbstractDrawable {
       // If unit is not in the "excluded list" it will get drawn
       if (maxRange != 0) {
         final Image flag = uiContext.getFlagImageFactory().getFlag(owner);
-        final int xoffset = img.getWidth(null) / 2 - flag.getWidth(null) / 2;
-        final int yoffset = img.getHeight(null) / 2 - flag.getHeight(null) / 4 - 5;
+        final int xOffset = img.getWidth(null) / 2 - flag.getWidth(null) / 2;
+        final int yOffset = img.getHeight(null) / 2 - flag.getHeight(null) / 4 - 5;
         graphics.drawImage(
             flag,
-            (placementPoint.x - bounds.x) + xoffset,
-            (placementPoint.y - bounds.y) + yoffset,
+            (placementPoint.x - bounds.x) + xOffset,
+            (placementPoint.y - bounds.y) + yOffset,
             null);
       }
       drawUnit(graphics, img, bounds);
@@ -148,22 +144,22 @@ public class UnitsDrawer extends AbstractDrawable {
       // If unit is not in the "excluded list" it will get drawn
       if (maxRange != 0) {
         final Image flag = uiContext.getFlagImageFactory().getSmallFlag(owner);
-        final int xoffset = img.getWidth(null) - flag.getWidth(null);
-        final int yoffset = img.getHeight(null) - flag.getHeight(null);
+        final int xOffset = img.getWidth(null) - flag.getWidth(null);
+        final int yOffset = img.getHeight(null) - flag.getHeight(null);
         // This Method draws the Flag in the lower right corner of the unit image. Since the
-        // position is the upper
-        // left corner we have to move the picture up by the height and left by the width.
+        // position is the upper left corner we have to move the picture up by the height and
+        // left by the width.
         graphics.drawImage(
             flag,
-            (placementPoint.x - bounds.x) + xoffset,
-            (placementPoint.y - bounds.y) + yoffset,
+            (placementPoint.x - bounds.x) + xOffset,
+            (placementPoint.y - bounds.y) + yOffset,
             null);
       }
     } else {
       drawUnit(graphics, img, bounds);
     }
 
-    // more then 1 unit of this category
+    // more than 1 unit of this category
     if (count != 1) {
       final int stackSize = mapData.getDefaultUnitsStackSize();
       if (stackSize > 0) { // Display more units as a stack
@@ -173,39 +169,22 @@ public class UnitsDrawer extends AbstractDrawable {
         }
         if (count > stackSize) {
           final String s = String.valueOf(count);
-          final int x =
-              placementPoint.x
-                  - bounds.x
-                  + 2 * stackSize
-                  + uiContext.getUnitImageFactory().getUnitImageWidth() * 6 / 10;
-          final int y =
-              placementPoint.y
-                  - 2 * stackSize
-                  - bounds.y
-                  + uiContext.getUnitImageFactory().getUnitImageHeight() / 3;
+
           drawOutlinedText(
               graphics,
               s,
-              x,
-              y,
+              placementPoint.x - bounds.x + 2 * stackSize + factory.getUnitImageWidth() * 6 / 10,
+              placementPoint.y - 2 * stackSize - bounds.y + factory.getUnitImageHeight() / 3,
               MapImage.getPropertyUnitCountColor(),
               MapImage.getPropertyUnitCountOutline());
         }
       } else { // Display a white number at the bottom of the unit
         final String s = String.valueOf(count);
-        final int x =
-            placementPoint.x
-                - bounds.x
-                + uiContext.getUnitImageFactory().getUnitCounterOffsetWidth();
-        final int y =
-            placementPoint.y
-                - bounds.y
-                + uiContext.getUnitImageFactory().getUnitCounterOffsetHeight();
         drawOutlinedText(
             graphics,
             s,
-            x,
-            y,
+            placementPoint.x - bounds.x + factory.getUnitCounterOffsetWidth(),
+            placementPoint.y - bounds.y + factory.getUnitCounterOffsetHeight(),
             MapImage.getPropertyUnitCountColor(),
             MapImage.getPropertyUnitCountOutline());
       }
@@ -221,37 +200,40 @@ public class UnitsDrawer extends AbstractDrawable {
   /** This draws the given image onto the given graphics object. */
   private void drawUnit(final Graphics2D graphics, final Image image, final Rectangle bounds) {
     graphics.drawImage(image, placementPoint.x - bounds.x, placementPoint.y - bounds.y, null);
+
+    // draw unit icons in top right corner
+    final List<Image> unitIcons =
+        uiContext.getUnitIconImageFactory().getImages(playerName, unitType);
+    for (final Image unitIcon : unitIcons) {
+      final int xOffset = image.getWidth(null) - unitIcon.getWidth(null);
+      graphics.drawImage(
+          unitIcon, (placementPoint.x - bounds.x) + xOffset, (placementPoint.y - bounds.y), null);
+    }
   }
 
   private void displayHitDamage(final Rectangle bounds, final Graphics2D graphics) {
-    if (territoryName.length() != 0 && damaged > 1) {
+    if (!territoryName.isEmpty() && damaged > 1) {
       final String s = String.valueOf(damaged);
-      final int x =
-          placementPoint.x - bounds.x + uiContext.getUnitImageFactory().getUnitImageWidth() * 3 / 4;
-      final int y =
-          placementPoint.y - bounds.y + uiContext.getUnitImageFactory().getUnitImageHeight() / 4;
+      final var factory = uiContext.getUnitImageFactory();
       drawOutlinedText(
           graphics,
           s,
-          x,
-          y,
+          placementPoint.x - bounds.x + factory.getUnitImageWidth() * 3 / 4,
+          placementPoint.y - bounds.y + factory.getUnitImageHeight() / 4,
           MapImage.getPropertyUnitHitDamageColor(),
           MapImage.getPropertyUnitHitDamageOutline());
     }
   }
 
   private void displayFactoryDamage(final Rectangle bounds, final Graphics2D graphics) {
-    if (territoryName.length() != 0 && bombingUnitDamage > 0) {
+    if (!territoryName.isEmpty() && bombingUnitDamage > 0) {
       final String s = String.valueOf(bombingUnitDamage);
-      final int x =
-          placementPoint.x - bounds.x + uiContext.getUnitImageFactory().getUnitImageWidth() / 4;
-      final int y =
-          placementPoint.y - bounds.y + uiContext.getUnitImageFactory().getUnitImageHeight() / 4;
+      final var factory = uiContext.getUnitImageFactory();
       drawOutlinedText(
           graphics,
           s,
-          x,
-          y,
+          placementPoint.x - bounds.x + factory.getUnitImageWidth() / 4,
+          placementPoint.y - bounds.y + factory.getUnitImageHeight() / 4,
           MapImage.getPropertyUnitFactoryDamageColor(),
           MapImage.getPropertyUnitFactoryDamageOutline());
     }
@@ -280,8 +262,8 @@ public class UnitsDrawer extends AbstractDrawable {
 
   List<Unit> getUnits(final GameState data) {
     // note - it may be the case where the territory is being changed as a result to a mouse click,
-    // and the map units
-    // haven't updated yet, so the unit count from the territory wont match the units in count
+    // and the map units haven't updated yet, so the unit count from the territory won't match the
+    // units in count
     final Territory t = data.getMap().getTerritory(territoryName);
     final UnitType type = data.getUnitTypeList().getUnitType(unitType);
     final Predicate<Unit> selectedUnits =
@@ -293,7 +275,7 @@ public class UnitsDrawer extends AbstractDrawable {
                 bombingUnitDamage > 0
                     ? Matches.unitHasTakenSomeBombingUnitDamage()
                     : Matches.unitHasNotTakenAnyBombingUnitDamage());
-    return t.getUnitCollection().getMatches(selectedUnits);
+    return t.getMatches(selectedUnits);
   }
 
   public Territory getTerritory(GameData data) {
