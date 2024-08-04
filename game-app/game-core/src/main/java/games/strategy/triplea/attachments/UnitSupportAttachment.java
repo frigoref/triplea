@@ -21,6 +21,7 @@ import java.util.stream.Collectors;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import lombok.EqualsAndHashCode;
+import lombok.Getter;
 import lombok.Value;
 
 /**
@@ -45,8 +46,8 @@ public class UnitSupportAttachment extends DefaultAttachment {
   private boolean strength = false;
   private boolean aaRoll = false;
   private boolean aaStrength = false;
-  private int bonus = 0;
-  private int number = 0;
+  @Getter private int bonus = 0;
+  @Getter private int number = 0;
   private boolean allied = false;
   private boolean enemy = false;
   private @Nullable BonusType bonusType = null;
@@ -295,14 +296,6 @@ public class UnitSupportAttachment extends DefaultAttachment {
     return unitType;
   }
 
-  public int getNumber() {
-    return number;
-  }
-
-  public int getBonus() {
-    return bonus;
-  }
-
   public boolean getAllied() {
     return allied;
   }
@@ -420,7 +413,7 @@ public class UnitSupportAttachment extends DefaultAttachment {
   public void validate(final GameState data) {}
 
   @Override
-  public MutableProperty<?> getPropertyOrNull(String propertyName) {
+  public @Nullable MutableProperty<?> getPropertyOrNull(String propertyName) {
     switch (propertyName) {
       case UNIT_TYPE:
         return MutableProperty.of(

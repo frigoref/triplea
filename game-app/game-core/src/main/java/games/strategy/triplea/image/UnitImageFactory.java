@@ -25,16 +25,20 @@ import java.io.File;
 import java.io.IOException;
 import java.net.URL;
 import java.nio.file.Files;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import javax.imageio.ImageIO;
 import javax.swing.ImageIcon;
 import lombok.Builder;
+import lombok.Getter;
+import lombok.Synchronized;
 import lombok.Value;
 import lombok.extern.slf4j.Slf4j;
 
-/** A factory with an image cache for creating unit images. */
+/** A factory with a thread-safe image cache for creating unit images. */
 @Slf4j
 public class UnitImageFactory {
   public static final int DEFAULT_UNIT_ICON_SIZE = 48;
@@ -45,6 +49,7 @@ public class UnitImageFactory {
    * account.
    */
   private final int unitIconWidth;
+
   /**
    * Height of all icons. You probably want getUnitImageHeight(), which takes scale factor into
    * account.
@@ -53,14 +58,18 @@ public class UnitImageFactory {
 
   private final int unitCounterOffsetWidth;
   private final int unitCounterOffsetHeight;
-  // maps Point -> image
+  // maps Point -> (scaled) image
   private final Map<ImageKey, Image> images = new HashMap<>();
-  // maps Point -> Icon
+  // maps Point -> (unscaled) Icon
   private final Map<String, ImageIcon> icons = new HashMap<>();
   // Temporary colorized image files used for URLs for html views (e.g. unit stats table).
   private final Map<ImageKey, URL> colorizedTempFiles = new HashMap<>();
+  private final List<File> tempFiles = new ArrayList<>();
+
+  /** -- GETTER -- Return the unit scaling factor. */
   // Scaling factor for unit images
-  private final double scaleFactor;
+  @Getter private final double scaleFactor;
+
   private final ResourceLoader resourceLoader;
   private final MapData mapData;
 
@@ -73,6 +82,20 @@ public class UnitImageFactory {
     this.scaleFactor = unitScale;
     this.resourceLoader = resourceLoader;
     this.mapData = mapData;
+  }
+
+  @Synchronized
+  public void clearCache() {
+    images.clear();
+    icons.clear();
+    deleteTempFiles();
+    colorizedTempFiles.clear();
+  }
+
+  @Synchronized
+  public void deleteTempFiles() {
+    tempFiles.forEach(File::delete);
+    tempFiles.clear();
   }
 
   @Value
@@ -184,11 +207,6 @@ public class UnitImageFactory {
         : new UnitImageFactory(resourceLoader, scaleFactor, mapData);
   }
 
-  /** Return the unit scaling factor. */
-  public double getScaleFactor() {
-    return scaleFactor;
-  }
-
   /** Return the width of scaled units. */
   public int getUnitImageWidth() {
     return (int) (scaleFactor * unitIconWidth);
@@ -207,54 +225,64 @@ public class UnitImageFactory {
     return (int) (scaleFactor * unitCounterOffsetHeight);
   }
 
+  @Synchronized
   public boolean hasImage(final ImageKey imageKey) {
     return images.containsKey(imageKey) || getBaseImageUrl(imageKey).isPresent();
   }
 
   /**
-   * Return the appropriate unit image. If an image cannot be found, a placeholder 'no-image' image
-   * is returned.
+   * Return the appropriate scaled unit image. If an image cannot be found, a placeholder 'no-image'
+   * image is returned.
    */
+  @Synchronized
   public Image getImage(final ImageKey imageKey) {
     return Optional.ofNullable(images.get(imageKey))
-        .or(
-            () ->
-                getTransformedImage(imageKey)
-                    .map(
-                        baseImage -> {
-                          // We want to scale units according to the given scale factor.
-                          // We use smooth scaling since the images are cached to allow to take our
-                          // time in doing the scaling.
-                          // Image observer is null, since the image should have been guaranteed to
-                          // be loaded.
-                          final int baseWidth = baseImage.getWidth(null);
-                          final int baseHeight = baseImage.getHeight(null);
-                          final int width = Math.max(1, (int) (baseWidth * scaleFactor));
-                          final int height = Math.max(1, (int) (baseHeight * scaleFactor));
-                          final Image scaledImage =
-                              baseImage.getScaledInstance(width, height, Image.SCALE_SMOOTH);
-                          // Ensure the scaling is completed.
-                          Util.ensureImageLoaded(scaledImage);
-                          images.put(imageKey, scaledImage);
-                          return scaledImage;
-                        }))
-        .orElseGet(
-            () -> {
-              BufferedImage image =
-                  resourceLoader.getImageOrThrow(FILE_NAME_BASE + "missing_unit_image.png");
-              Color playerColor = mapData.getPlayerColor(imageKey.getPlayer().getName());
-              ImageTransformer.colorize(playerColor, image);
+        .or(() -> getTransformedScaledImage(imageKey))
+        .orElseGet(() -> createNoImageImage(imageKey));
+  }
 
-              Graphics graphics = image.getGraphics();
-              Font font = graphics.getFont();
-              graphics.setFont(font.deriveFont(8.0f));
-              graphics.setColor(Color.LIGHT_GRAY);
-              graphics.drawString(imageKey.getBaseImageName(), 5, 28);
-              return image;
+  private Optional<Image> getTransformedScaledImage(final ImageKey imageKey) {
+    return getTransformedImage(imageKey)
+        .map(
+            baseImage -> {
+              // We want to scale units according to the given scale factor.
+              // We use smooth scaling since the images are cached to allow to take our
+              // time in doing the scaling.
+              // Image observer is null, since the image should have been guaranteed to
+              // be loaded.
+              final int baseWidth = baseImage.getWidth(null);
+              final int baseHeight = baseImage.getHeight(null);
+              final int width = Math.max(1, (int) (baseWidth * scaleFactor));
+              final int height = Math.max(1, (int) (baseHeight * scaleFactor));
+              final Image scaledImage =
+                  baseImage.getScaledInstance(width, height, Image.SCALE_SMOOTH);
+              // Ensure the scaling is completed.
+              Util.ensureImageLoaded(scaledImage);
+              images.put(imageKey, scaledImage);
+              return scaledImage;
             });
   }
 
-  public Optional<URL> getBaseImageUrl(final ImageKey imageKey) {
+  private Optional<Image> getTransformedImage(final ImageKey imageKey) {
+    return getBaseImageUrl(imageKey)
+        .map(imageLocation -> loadImageAndTransform(imageLocation, imageKey));
+  }
+
+  private Image createNoImageImage(ImageKey imageKey) {
+    BufferedImage image = resourceLoader.getImageOrThrow(FILE_NAME_BASE + "missing_unit_image.png");
+    Color playerColor = mapData.getPlayerColor(imageKey.getPlayer().getName());
+    ImageTransformer.colorize(playerColor, image);
+
+    Graphics graphics = image.getGraphics();
+    Font font = graphics.getFont();
+    graphics.setFont(font.deriveFont(8.0f));
+    graphics.setColor(Color.LIGHT_GRAY);
+    graphics.drawString(imageKey.getBaseImageName(), 5, 28);
+    images.put(imageKey, image);
+    return image;
+  }
+
+  private Optional<URL> getBaseImageUrl(final ImageKey imageKey) {
     final String baseImageName = imageKey.getBaseImageName();
     final GamePlayer gamePlayer = imageKey.getPlayer();
     // URL uses '/' not '\'
@@ -264,6 +292,7 @@ public class UnitImageFactory {
     return Optional.ofNullable(url);
   }
 
+  @Synchronized
   public Optional<URL> getPossiblyTransformedImageUrl(final ImageKey imageKey) {
     final Optional<URL> url = getBaseImageUrl(imageKey);
     if (url.isEmpty() || !shouldTransformImage(imageKey)) {
@@ -282,6 +311,7 @@ public class UnitImageFactory {
                 File file = Files.createTempFile(key.getFullName(), ".png").toFile();
                 // Delete the file on exit.
                 file.deleteOnExit();
+                tempFiles.add(file);
                 ImageIO.write(bufferedImage, "PNG", file);
                 return file.toURI().toURL();
               } catch (IOException e) {
@@ -290,11 +320,6 @@ public class UnitImageFactory {
               // Return the non-colorized URL on error.
               return url.get();
             }));
-  }
-
-  private Optional<Image> getTransformedImage(final ImageKey imageKey) {
-    return getBaseImageUrl(imageKey)
-        .map(imageLocation -> loadImageAndTransform(imageLocation, imageKey));
   }
 
   private Image loadImageAndTransform(URL imageLocation, ImageKey imageKey) {
@@ -358,10 +383,15 @@ public class UnitImageFactory {
     return highlightedImage;
   }
 
-  /** Return an icon image for a unit. */
+  /** Return an _unscaled_ icon image for a unit. */
+  @Synchronized
   public ImageIcon getIcon(final ImageKey imageKey) {
     final String fullName = imageKey.getFullName();
-    return icons.computeIfAbsent(fullName, key -> new ImageIcon(getImage(imageKey)));
+    return icons.computeIfAbsent(
+        fullName,
+        name ->
+            new ImageIcon(
+                getTransformedImage(imageKey).orElseGet(() -> createNoImageImage(imageKey))));
   }
 
   public Dimension getImageDimensions(final ImageKey imageKey) {

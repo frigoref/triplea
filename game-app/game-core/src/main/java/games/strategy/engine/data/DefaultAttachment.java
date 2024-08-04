@@ -30,12 +30,13 @@ import org.triplea.java.collections.IntegerMap;
  * will result in a null instead of giving the key for attachment1. So just don't have maps of
  * attachments, in an attachment. Thx, Veqryn.
  */
+@Getter
 public abstract class DefaultAttachment extends GameDataComponent implements IAttachment {
   private static final long serialVersionUID = -1985116207387301730L;
   private static final Splitter COLON_SPLITTER = Splitter.on(':');
 
-  @Getter @Setter private Attachable attachedTo;
-  @Getter private String name;
+  @Setter private Attachable attachedTo;
+  private @Nullable String name;
 
   protected DefaultAttachment(
       final String name, final Attachable attachable, final GameData gameData) {
@@ -96,7 +97,7 @@ public abstract class DefaultAttachment extends GameDataComponent implements IAt
   }
 
   protected String thisErrorMsg() {
-    return ",   for: " + toString();
+    return ",   for: " + this;
   }
 
   /** Returns null or the toString() of the field value. */

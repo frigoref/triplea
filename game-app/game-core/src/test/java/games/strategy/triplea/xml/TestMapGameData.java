@@ -27,6 +27,7 @@ public enum TestMapGameData {
   REVISED("revised_test.xml"),
 
   VICTORY_TEST("victory_test.xml"),
+  VICTORY_TEST_SHOULD_SAVE_UP_FOR_A_FLEET("victory_test_shouldSaveUpForAFleet.xml"),
 
   WW2V3_1941("ww2v3_1941_test.xml"),
 
@@ -77,7 +78,8 @@ public enum TestMapGameData {
             new XmlGameElementMapper(
                 Map.of("TestDelegate", TestDelegate::new),
                 Map.of("TestAttachment", TestAttachment::new)),
-            new Version("2.0.0"))
+            new Version("2.0.0"),
+            false)
         .orElseThrow(() -> new IllegalStateException("Error parsing: " + mapUri));
   }
 }

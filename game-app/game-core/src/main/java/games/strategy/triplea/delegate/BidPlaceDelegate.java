@@ -1,37 +1,38 @@
 package games.strategy.triplea.delegate;
 
+import static java.util.function.Predicate.not;
+
 import games.strategy.engine.data.GamePlayer;
 import games.strategy.engine.data.Territory;
 import games.strategy.engine.data.Unit;
-import games.strategy.engine.data.UnitType;
 import games.strategy.triplea.attachments.PlayerAttachment;
-import games.strategy.triplea.attachments.UnitAttachment;
+import games.strategy.triplea.attachments.TerritoryAttachment;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Predicate;
+import javax.annotation.Nullable;
 import org.triplea.java.collections.CollectionUtils;
-import org.triplea.java.collections.IntegerMap;
 
 /** Logic for unit placement when bid mode is active. */
 public class BidPlaceDelegate extends AbstractPlaceDelegate {
   // Allow production of any number of units
   @Override
-  protected String checkProduction(
+  protected @Nullable String checkProduction(
       final Territory to, final Collection<Unit> units, final GamePlayer player) {
     return null;
   }
 
   // Return whether we can place bid in a certain territory
   @Override
-  protected String canProduce(
+  protected @Nullable String canProduce(
       final Territory to, final Collection<Unit> units, final GamePlayer player) {
     return canProduce(to, to, units, player);
   }
 
   @Override
-  protected String canProduce(
+  protected @Nullable String canProduce(
       final Territory producer,
       final Territory to,
       final Collection<Unit> units,
@@ -39,11 +40,11 @@ public class BidPlaceDelegate extends AbstractPlaceDelegate {
     // we can place if no enemy units and its water
     if (to.isWater()) {
       if (units.stream().anyMatch(Matches.unitIsLand())) {
-        return "Cant place land units at sea";
+        return "Can't place land units at sea";
       } else if (to.anyUnitsMatch(Matches.enemyUnit(player))) {
-        return "Cant place in sea zone containing enemy units";
+        return "Can't place in sea zone containing enemy units";
       } else if (!to.anyUnitsMatch(Matches.unitIsOwnedBy(player))) {
-        return "Cant place in sea zone that does not contain a unit owned by you";
+        return "Can't place in sea zone that does not contain a unit owned by you";
       } else {
         return null;
       }
@@ -51,33 +52,23 @@ public class BidPlaceDelegate extends AbstractPlaceDelegate {
 
     // we can place on territories we own
     if (units.stream().anyMatch(Matches.unitIsSea())) {
-      return "Cant place sea units on land";
+      return "Can't place sea units on land";
     } else if (!to.isOwnedBy(player)) {
       final PlayerAttachment pa = PlayerAttachment.get(to.getOwner());
-      if (pa != null
-          && pa.getGiveUnitControl() != null
-          && pa.getGiveUnitControl().contains(player)) {
+      if (pa != null && pa.getGiveUnitControl().contains(player)) {
         return null;
       } else if (to.anyUnitsMatch(Matches.unitIsOwnedBy(player))) {
         return null;
       }
-      return "You dont own " + to.getName();
+      return "You don't own " + to.getName();
     } else {
       return null;
     }
   }
 
   @Override
-  protected List<Territory> getAllProducers(
-      final Territory to, final GamePlayer player, final Collection<Unit> unitsToPlace) {
-    final List<Territory> producers = new ArrayList<>();
-    producers.add(to);
-    return producers;
-  }
-
-  @Override
   protected int getMaxUnitsToBePlaced(
-      final Collection<Unit> units, final Territory to, final GamePlayer player) {
+      final @Nullable Collection<Unit> units, final Territory to, final GamePlayer player) {
     if (units == null) {
       return -1;
     }
@@ -87,7 +78,7 @@ public class BidPlaceDelegate extends AbstractPlaceDelegate {
   @Override
   protected int getMaxUnitsToBePlacedFrom(
       final Territory producer,
-      final Collection<Unit> units,
+      final @Nullable Collection<Unit> units,
       final Territory to,
       final GamePlayer player,
       final boolean countSwitchedProductionToNeighbors,
@@ -99,22 +90,13 @@ public class BidPlaceDelegate extends AbstractPlaceDelegate {
     return units.size();
   }
 
-  @Override
-  protected int getMaxUnitsToBePlacedFrom(
-      final Territory producer,
-      final Collection<Unit> units,
-      final Territory to,
-      final GamePlayer player) {
-    if (units == null) {
-      return -1;
-    }
-    return getMaxUnitsToBePlacedFrom(producer, units, to, player, false, null, null);
-  }
-
   // Return collection of bid units which can placed in a land territory
   @Override
-  protected Collection<Unit> getUnitsToBePlacedLand(
+  protected Collection<Unit> getUnitsToBePlaced(
       final Territory to, final Collection<Unit> units, final GamePlayer player) {
+    if (to.isWater()) {
+      return super.getUnitsToBePlaced(to, units, player);
+    }
     final Collection<Unit> unitsAtStartOfTurnInTo = unitsAtStartOfStepInTerritory(to);
     final Collection<Unit> placeableUnits = new ArrayList<>();
     // we add factories and constructions later
@@ -122,61 +104,36 @@ public class BidPlaceDelegate extends AbstractPlaceDelegate {
     final Predicate<Unit> airUnits = Matches.unitIsAir().and(Matches.unitIsNotConstruction());
     placeableUnits.addAll(CollectionUtils.getMatches(units, groundUnits));
     placeableUnits.addAll(CollectionUtils.getMatches(units, airUnits));
-    if (units.stream().anyMatch(Matches.unitIsConstruction())) {
-      final IntegerMap<String> constructionsMap =
-          howManyOfEachConstructionCanPlace(to, to, units, player);
-      final Collection<Unit> skipUnit = new ArrayList<>();
-      for (final Unit currentUnit :
-          CollectionUtils.getMatches(units, Matches.unitIsConstruction())) {
-        final int maxUnits = howManyOfConstructionUnit(currentUnit, constructionsMap);
-        if (maxUnits > 0) {
-          // we are doing this because we could have multiple unitTypes with the same
-          // constructionType, so we have to be
-          // able to place the max placement by constructionType of each unitType
-          if (skipUnit.contains(currentUnit)) {
-            continue;
-          }
-          placeableUnits.addAll(
-              CollectionUtils.getNMatches(
-                  units, maxUnits, Matches.unitIsOfType(currentUnit.getType())));
-          skipUnit.addAll(
-              CollectionUtils.getMatches(units, Matches.unitIsOfType(currentUnit.getType())));
-        }
-      }
+    addConstructionUnits(units, to, placeableUnits);
+    if (hasUnitPlacementRestrictions()) {
+      final int territoryProduction = TerritoryAttachment.getProduction(to);
+      final Predicate<Unit> cantBePlacedDueToTerritoryProduction =
+          u -> {
+            int requiredProduction = u.getUnitAttachment().getCanOnlyBePlacedInTerritoryValuedAtX();
+            return requiredProduction != -1 && requiredProduction > territoryProduction;
+          };
+      placeableUnits.removeIf(cantBePlacedDueToTerritoryProduction);
     }
     // remove any units that require other units to be consumed on creation (veqryn)
-    if (placeableUnits.stream().anyMatch(Matches.unitConsumesUnitsOnCreation())) {
-      final Collection<Unit> unitsWhichConsume =
-          CollectionUtils.getMatches(placeableUnits, Matches.unitConsumesUnitsOnCreation());
-      for (final Unit unit : unitsWhichConsume) {
-        if (Matches.unitWhichConsumesUnitsHasRequiredUnits(unitsAtStartOfTurnInTo)
-            .negate()
-            .test(unit)) {
-          placeableUnits.remove(unit);
-        }
-      }
-    }
+    placeableUnits.removeIf(
+        not(Matches.unitWhichConsumesUnitsHasRequiredUnits(unitsAtStartOfTurnInTo)));
     // now check stacking limits
-    final Collection<Unit> placeableUnits2 = new ArrayList<>();
-    final Collection<UnitType> typesAlreadyChecked = new ArrayList<>();
-    for (final Unit currentUnit : placeableUnits) {
-      final UnitType ut = currentUnit.getType();
-      if (typesAlreadyChecked.contains(ut)) {
-        continue;
-      }
-      typesAlreadyChecked.add(ut);
-      placeableUnits2.addAll(
-          CollectionUtils.getNMatches(
-              placeableUnits,
-              UnitAttachment.getMaximumNumberOfThisUnitTypeToReachStackingLimit(
-                  "placementLimit",
-                  ut,
-                  to,
-                  player,
-                  getData().getRelationshipTracker(),
-                  getData().getProperties()),
-              Matches.unitIsOfType(ut)));
-    }
-    return placeableUnits2;
+    return applyStackingLimitsPerUnitType(placeableUnits, to);
+  }
+
+  @Override
+  protected List<Territory> getAllProducers(
+      final Territory to, final GamePlayer player, final Collection<Unit> unitsToPlace) {
+    final List<Territory> producers = new ArrayList<>();
+    producers.add(to);
+    return producers;
+  }
+
+  @Override
+  protected Predicate<Unit> unitWhichRequiresUnitsHasRequiredUnits(
+      final Territory to, final boolean countNeighbors) {
+    // Ignore "require units" for bid placements, since that's used for custom factory types, which
+    // bids should be ignoring.
+    return u -> true;
   }
 }

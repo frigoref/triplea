@@ -11,7 +11,6 @@ import static games.strategy.engine.framework.CliProperties.TRIPLEA_PORT;
 import static games.strategy.engine.framework.CliProperties.TRIPLEA_SERVER;
 
 import java.net.URI;
-import java.util.ArrayList;
 import java.util.List;
 import org.triplea.domain.data.UserName;
 import org.triplea.game.client.HeadedApplicationContext;
@@ -30,8 +29,7 @@ public class GameProcess {
       final String comments,
       final char[] password,
       final URI lobbyUri) {
-    final List<String> commands = new ArrayList<>();
-    ProcessRunnerUtil.populateBasicJavaArgs(commands);
+    final List<String> commands = ProcessRunnerUtil.createBasicJavaArgs();
     commands.add("-D" + TRIPLEA_SERVER + "=true");
     commands.add("-D" + TRIPLEA_PORT + "=" + port);
     commands.add("-D" + TRIPLEA_NAME + "=" + playerName);
@@ -55,8 +53,7 @@ public class GameProcess {
       return;
     }
 
-    final List<String> commands = new ArrayList<>();
-    ProcessRunnerUtil.populateBasicJavaArgs(commands);
+    final List<String> commands = ProcessRunnerUtil.createBasicJavaArgs();
     final String prefix = "-D";
     commands.add(prefix + TRIPLEA_CLIENT + "=true");
     commands.add(prefix + TRIPLEA_PORT + "=" + description.getHostedBy().getPort());

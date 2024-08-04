@@ -78,6 +78,7 @@ import org.triplea.swing.key.binding.SwingKeyBinding;
 public class MovePanel extends AbstractMovePanel {
   private static final long serialVersionUID = 5004515340964828564L;
   private static final int defaultMinTransportCost = 5;
+
   /** Number of units to add/remove when Alt key is down. */
   private static final int MULTI_SELECT_NUMBER = 10;
 
@@ -85,10 +86,10 @@ public class MovePanel extends AbstractMovePanel {
   private final Map<Unit, Collection<Unit>> airTransportDependents = new HashMap<>();
 
   // access only through getter and setter!
-  private Territory firstSelectedTerritory;
-  private Territory selectedEndpointTerritory;
+  @Getter private @Nullable Territory firstSelectedTerritory;
+  @Getter @Setter private @Nullable Territory selectedEndpointTerritory;
   private Territory mouseCurrentTerritory;
-  private List<Territory> forced;
+  private @Nullable List<Territory> forced;
   @Setter private boolean nonCombat;
   private Point mouseSelectedPoint;
   private Point mouseCurrentPoint;
@@ -98,19 +99,21 @@ public class MovePanel extends AbstractMovePanel {
   // the must move with details for the currently selected territory
   // note this is kept in sync because we do not modify selectedTerritory directly
   // instead we only do so through the private setter
-  private MustMoveWithDetails mustMoveWithDetails = null;
+  private @Nullable MustMoveWithDetails mustMoveWithDetails = null;
   // cache this so we can update it only when territory/units change
   private Collection<Unit> unitsThatCanMoveOnRoute;
   private @Nullable Image currentCursorImage;
   private final @Nullable Image warningImage;
   private final @Nullable Image errorImage;
-  private Route routeCached = null;
+  private @Nullable Route routeCached = null;
   private String displayText = "Combat Move";
-  private MoveType moveType = MoveType.DEFAULT;
+  @Setter private MoveType moveType = MoveType.DEFAULT;
   private final UnitScroller unitScroller;
 
   @Getter(onMethod_ = @Override)
   private final CollapsiblePanel unitScrollerPanel;
+
+  private boolean isHighlightingUnits;
 
   private final UnitSelectionListener unitSelectionListener =
       new UnitSelectionListener() {
@@ -162,7 +165,7 @@ public class MovePanel extends AbstractMovePanel {
           // basic match criteria only
           final Predicate<Unit> unitsToMoveMatch = getMovableMatch(null, List.of());
           if (units.isEmpty() && selectedUnits.isEmpty() && !mouseDetails.isShiftDown()) {
-            final List<Unit> unitsToMove = t.getUnitCollection().getMatches(unitsToMoveMatch);
+            final List<Unit> unitsToMove = t.getMatches(unitsToMoveMatch);
             if (unitsToMove.isEmpty()) {
               return;
             }
@@ -214,7 +217,7 @@ public class MovePanel extends AbstractMovePanel {
                   .and(unitsToMoveMatch)
                   .and(Matches.unitIsOwnedBy(getUnitOwner(t.getUnits())));
             }
-            selectedUnits.addAll(t.getUnitCollection().getMatches(ownedNotFactoryBuilder.build()));
+            selectedUnits.addAll(t.getMatches(ownedNotFactoryBuilder.build()));
           } else if (mouseDetails.isControlDown()) {
             selectedUnits.addAll(CollectionUtils.getMatches(units, unitsToMoveMatch));
           } else { // add one
@@ -258,9 +261,7 @@ public class MovePanel extends AbstractMovePanel {
                       .and(Matches.unitHasNotMoved())
                       .and(transport -> transport.getTransporting(t).isEmpty());
               final Collection<Unit> candidateAirTransports =
-                  CollectionUtils.getMatches(
-                      t.getUnitCollection().getMatches(unitsToMoveMatch),
-                      candidateAirTransportsMatch);
+                  t.getMatches(unitsToMoveMatch.and(candidateAirTransportsMatch));
               candidateAirTransports.removeAll(airTransportDependents.keySet());
               if (!unitsToLoad.isEmpty() && !candidateAirTransports.isEmpty()) {
                 final Collection<Unit> airTransportsToLoad =
@@ -590,7 +591,7 @@ public class MovePanel extends AbstractMovePanel {
               new SimpleUnitPanel(
                   getMap().getUiContext(),
                   SimpleUnitPanel.Style.SMALL_ICONS_WRAPPED_WITH_LABEL_WHEN_EMPTY);
-          unitPanel.setUnitsFromCategories(UnitSeparator.categorize(possibleScramblers));
+          unitPanel.setUnits(possibleScramblers);
           final String message = "Warning: Units may scramble from nearby territories to defend:";
           final JPanel panel =
               new JPanelBuilder()
@@ -694,10 +695,6 @@ public class MovePanel extends AbstractMovePanel {
     unitScrollerPanel = unitScroller.build();
     unitScrollerPanel.setVisible(false);
     registerKeyBindings(frame);
-  }
-
-  public void setMoveType(final MoveType moveType) {
-    this.moveType = moveType;
   }
 
   private GamePlayer getUnitOwner(final Collection<Unit> units) {
@@ -928,7 +925,9 @@ public class MovePanel extends AbstractMovePanel {
         }
       }
     }
-    return ImmutableList.copyOf(selectedUnitsToUnload);
+    // Return an unmodifiable list for consistent semantics for the caller, which sometimes returns
+    // List.of() and sometimes the result of this functiom.
+    return Collections.unmodifiableList(selectedUnitsToUnload);
   }
 
   public boolean confirmUnitChooserDialog(final UnitChooser chooser, final String title) {
@@ -1040,7 +1039,7 @@ public class MovePanel extends AbstractMovePanel {
   }
 
   /** Get the route ignoring forced territories. */
-  private Route getRouteNonForced(
+  private @Nullable Route getRouteNonForced(
       final Territory start, final Territory end, final Collection<Unit> selectedUnits) {
     // can't rely on current player being the unit owner in Edit Mode
     // look at the units being moved to determine allies and enemies
@@ -1054,7 +1053,8 @@ public class MovePanel extends AbstractMovePanel {
         !GameStepPropertiesHelper.isAirborneMove(getData()));
   }
 
-  private void updateUnitsThatCanMoveOnRoute(final Collection<Unit> units, final Route route) {
+  private void updateUnitsThatCanMoveOnRoute(
+      final Collection<Unit> units, final @Nullable Route route) {
     if (route == null || route.hasNoSteps()) {
       clearStatusMessage();
       getMap().showMouseCursor();
@@ -1105,7 +1105,7 @@ public class MovePanel extends AbstractMovePanel {
   }
 
   /** Route can be null. */
-  final void updateRouteAndMouseShadowUnits(final Route route) {
+  final void updateRouteAndMouseShadowUnits(final @Nullable Route route) {
     routeCached = route;
     getMap().setRoute(route, mouseSelectedPoint, mouseCurrentPoint, currentCursorImage);
     if (route == null) {
@@ -1286,7 +1286,7 @@ public class MovePanel extends AbstractMovePanel {
       final Route route,
       final Predicate<Collection<Unit>> matchCriteria) {
     final List<Unit> candidateUnits =
-        getFirstSelectedTerritory().getUnitCollection().getMatches(getMovableMatch(route, units));
+        getFirstSelectedTerritory().getMatches(getMovableMatch(route, units));
     final Set<UnitCategory> categories =
         UnitSeparator.categorize(
             candidateUnits,
@@ -1368,7 +1368,7 @@ public class MovePanel extends AbstractMovePanel {
     return "MovePanel";
   }
 
-  final void setFirstSelectedTerritory(final Territory firstSelectedTerritory) {
+  final void setFirstSelectedTerritory(final @Nullable Territory firstSelectedTerritory) {
     if (Objects.equals(this.firstSelectedTerritory, firstSelectedTerritory)) {
       return;
     }
@@ -1380,18 +1380,6 @@ public class MovePanel extends AbstractMovePanel {
           MoveValidator.getMustMoveWith(
               firstSelectedTerritory, airTransportDependents, getCurrentPlayer());
     }
-  }
-
-  private Territory getFirstSelectedTerritory() {
-    return firstSelectedTerritory;
-  }
-
-  final void setSelectedEndpointTerritory(final Territory selectedEndpointTerritory) {
-    this.selectedEndpointTerritory = selectedEndpointTerritory;
-  }
-
-  private Territory getSelectedEndpointTerritory() {
-    return selectedEndpointTerritory;
   }
 
   private List<Unit> userChooseUnits(
@@ -1511,26 +1499,28 @@ public class MovePanel extends AbstractMovePanel {
 
   /** Highlights movable units on the map for the current player. */
   private void highlightMovableUnits() {
-    final List<Territory> allTerritories;
-    try (GameData.Unlocker ignored = getData().acquireReadLock()) {
-      allTerritories = new ArrayList<>(getData().getMap().getTerritories());
+    if (isHighlightingUnits) {
+      isHighlightingUnits = false;
+      getMap().setUnitHighlight(List.of());
+      return;
     }
     final Predicate<Unit> movableUnitOwnedByMe =
         PredicateBuilder.of(Matches.unitIsOwnedBy(getData().getSequence().getStep().getPlayerId()))
             .and(Matches.unitHasMovementLeft())
             // if not non combat, cannot move aa units
             .andIf(!nonCombat, Matches.unitCanNotMoveDuringCombatMove().negate())
+            .and(not(unitScroller.getAllSkippedUnits()::contains))
             .build();
     final Collection<Collection<Unit>> highlight = new ArrayList<>();
-    for (final Territory t : allTerritories) {
-      final List<Unit> movableUnits = t.getUnitCollection().getMatches(movableUnitOwnedByMe);
-      movableUnits.removeAll(unitScroller.getAllSkippedUnits());
+    for (final Territory t : getData().getMap().getTerritories()) {
+      final List<Unit> movableUnits = t.getMatches(movableUnitOwnedByMe);
       if (!movableUnits.isEmpty()) {
         highlight.add(movableUnits);
       }
     }
     if (!highlight.isEmpty()) {
       getMap().setUnitHighlight(highlight);
+      isHighlightingUnits = true;
     }
   }
 }

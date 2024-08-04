@@ -9,6 +9,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.EnumSet;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import lombok.Getter;
 import lombok.Value;
@@ -44,6 +45,7 @@ public interface BattleState {
     REMOVED_CASUALTY,
   }
 
+  @Getter
   class UnitBattleFilter {
     public static final UnitBattleFilter ACTIVE =
         new UnitBattleFilter(UnitBattleStatus.ALIVE, UnitBattleStatus.CASUALTY);
@@ -52,7 +54,7 @@ public interface BattleState {
     public static final UnitBattleFilter REMOVED_CASUALTY =
         new UnitBattleFilter(UnitBattleStatus.REMOVED_CASUALTY);
 
-    @Getter private final EnumSet<UnitBattleStatus> filter;
+    private final EnumSet<UnitBattleStatus> filter;
 
     UnitBattleFilter(final UnitBattleStatus... status) {
       this.filter = EnumSet.noneOf(UnitBattleStatus.class);
@@ -119,4 +121,6 @@ public interface BattleState {
   @RemoveOnNextMajorRelease
   @Deprecated
   List<String> getStepStrings();
+
+  Optional<String> findStepNameForFiringUnits(Collection<Unit> firingUnits);
 }

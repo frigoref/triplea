@@ -13,6 +13,7 @@ import games.strategy.engine.data.Territory;
 import games.strategy.engine.data.Unit;
 import games.strategy.engine.data.events.GameDataChangeListener;
 import games.strategy.engine.data.events.TerritoryListener;
+import games.strategy.engine.data.events.ZoomMapListener;
 import games.strategy.triplea.Constants;
 import games.strategy.triplea.delegate.EditDelegate;
 import games.strategy.triplea.delegate.Matches;
@@ -88,6 +89,7 @@ public class MapPanel extends ImageScrollerLargeView {
   private final List<MapSelectionListener> mapSelectionListeners = new ArrayList<>();
   private final List<UnitSelectionListener> unitSelectionListeners = new ArrayList<>();
   private final List<MouseOverUnitListener> mouseOverUnitsListeners = new ArrayList<>();
+  private final List<ZoomMapListener> zoomMapListeners = new ArrayList<>();
   private GameData gameData;
   // the territory that the mouse is currently over
   @Getter private @Nullable Territory currentTerritory;
@@ -96,18 +98,18 @@ public class MapPanel extends ImageScrollerLargeView {
   private final TerritoryHighlighter territoryHighlighter = new TerritoryHighlighter();
   private final ImageScrollerSmallView smallView;
   // units the mouse is currently over
-  private Tuple<Territory, List<Unit>> currentUnits;
+  private @Nullable Tuple<Territory, List<Unit>> currentUnits;
   private final SmallMapImageManager smallMapImageManager;
-  private RouteDescription routeDescription;
+  private @Nullable RouteDescription routeDescription;
   private final TileManager tileManager;
-  private BufferedImage mouseShadowImage = null;
+  private @Nullable BufferedImage mouseShadowImage = null;
   private String movementLeftForCurrentUnits = "";
   private ResourceCollection movementFuelCost;
-  private final UiContext uiContext;
+  @Getter private final UiContext uiContext;
   private final ExecutorService executor =
       Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
   @Getter private Collection<Collection<Unit>> highlightedUnits = List.of();
-  private Cursor hiddenCursor = null;
+  private @Nullable Cursor hiddenCursor = null;
   private final MapRouteDrawer routeDrawer;
   private Set<Territory> countriesToUpdate = new HashSet<>();
   private final Object countriesToUpdateLock = new Object();
@@ -138,7 +140,11 @@ public class MapPanel extends ImageScrollerLargeView {
           // find the players with tech changes
           final Set<GamePlayer> playersWithTechChange = new HashSet<>();
           getPlayersWithTechChanges(change, playersWithTechChange);
-          if (!playersWithTechChange.isEmpty()) {
+          if (!playersWithTechChange.isEmpty()
+              || uiContext
+                  .getUnitIconImageFactory()
+                  .getUnitIconProperties()
+                  .testIfConditionsHaveChanged(gameData)) {
             tileManager.resetTiles(gameData, uiContext.getMapData());
             SwingUtilities.invokeLater(
                 () -> {
@@ -228,7 +234,7 @@ public class MapPanel extends ImageScrollerLargeView {
             if (!unitSelectionListeners.isEmpty()) {
               Tuple<Territory, List<Unit>> tuple = tileManager.getUnitsAtPoint(x, y, gameData);
               if (tuple == null) {
-                tuple = Tuple.of(getTerritory(x, y), List.of());
+                tuple = Tuple.of(terr, List.of());
               }
               notifyUnitSelected(tuple.getSecond(), tuple.getFirst(), md);
             }
@@ -241,10 +247,9 @@ public class MapPanel extends ImageScrollerLargeView {
             if (lastActive == -1) {
               ThreadRunner.runInNewThread(
                   () -> {
-                    // Mouse Events are different than key events
+                    // Mouse Events are different from key events
                     // That's why we're "simulating" multiple clicks while the mouse button is
-                    // held down
-                    // so the map keeps scrolling
+                    // held down so the map keeps scrolling
                     while (lastActive != -1) {
                       final int diffPixel = computeScrollSpeed.get();
                       if (lastActive == 5) {
@@ -380,10 +385,7 @@ public class MapPanel extends ImageScrollerLargeView {
     return screenBounds.contains(territoryCenter);
   }
 
-  /**
-   * the units must all be in the same stack on the map, and exist in the given territory. call with
-   * an null args
-   */
+  /** the units must all be in the same stack on the map, and exist in the given territory. */
   public void setUnitHighlight(@Nonnull final Collection<Collection<Unit>> units) {
     highlightedUnits = checkNotNull(units);
     SwingUtilities.invokeLater(this::repaint);
@@ -391,7 +393,7 @@ public class MapPanel extends ImageScrollerLargeView {
 
   public void centerOnTerritoryIgnoringMapLock(final @Nonnull Territory territory) {
     final Point p = uiContext.getMapData().getCenter(territory);
-    // when centering don't want the map to wrap around, eg if centering on hawaii
+    // when centering don't want the map to wrap around, e.g. if centering on hawaii
     super.setTopLeft((int) (p.x - (getScaledWidth() / 2)), (int) (p.y - (getScaledHeight() / 2)));
   }
 
@@ -455,7 +457,10 @@ public class MapPanel extends ImageScrollerLargeView {
 
   /** Set the route, could be null. */
   public void setRoute(
-      final Route route, final Point start, final Point end, final Image cursorImage) {
+      final @Nullable Route route,
+      final @Nullable Point start,
+      final @Nullable Point end,
+      final @Nullable Image cursorImage) {
     if (route == null) {
       routeDescription = null;
       SwingUtilities.invokeLater(this::repaint);
@@ -468,6 +473,14 @@ public class MapPanel extends ImageScrollerLargeView {
     }
     routeDescription = newRouteDescription;
     SwingUtilities.invokeLater(this::repaint);
+  }
+
+  public void addZoomMapListener(final ZoomMapListener listener) {
+    zoomMapListeners.add(listener);
+  }
+
+  public void removeZoomMapListener(final ZoomMapListener listener) {
+    zoomMapListeners.remove(listener);
   }
 
   public void addMapSelectionListener(final MapSelectionListener listener) {
@@ -574,7 +587,7 @@ public class MapPanel extends ImageScrollerLargeView {
     return new MouseDetails(me, x, y);
   }
 
-  private boolean unitsChanged(final Tuple<Territory, List<Unit>> newUnits) {
+  private boolean unitsChanged(final @Nullable Tuple<Territory, List<Unit>> newUnits) {
     return !ObjectUtils.referenceEquals(newUnits, currentUnits)
         && (newUnits == null
             || currentUnits == null
@@ -727,17 +740,18 @@ public class MapPanel extends ImageScrollerLargeView {
           movementFuelCost,
           uiContext.getResourceImageFactory());
     }
+    final var unitImageFactory = uiContext.getUnitImageFactory();
     for (final Collection<Unit> value : highlightedUnits) {
-      for (final UnitCategory category : UnitSeparator.categorize(value)) {
-        final Rectangle r = tileManager.getUnitRect(category.getUnits(), gameData);
+      List<UnitCategory> unitCategories =
+          UnitSeparator.getSortedUnitCategories(value, gameData, mapData);
+      for (final UnitCategory category : unitCategories) {
+        final @Nullable Rectangle r = tileManager.getUnitRect(category.getUnits(), gameData);
         if (r == null) {
           continue;
         }
 
-        Image image =
-            uiContext
-                .getUnitImageFactory()
-                .getHighlightImage(UnitImageFactory.ImageKey.of(category));
+        final Image image =
+            unitImageFactory.getHighlightImage(UnitImageFactory.ImageKey.of(category));
         final AffineTransform transform =
             AffineTransform.getTranslateInstance(
                 normalizeX(r.getX() - getXOffset()), normalizeY(r.getY() - getYOffset()));
@@ -787,7 +801,7 @@ public class MapPanel extends ImageScrollerLargeView {
   /** If we have nothing left undrawn, draw the tiles within preDrawMargin of us. */
   private void updateUndrawnTiles(final List<Tile> undrawnTiles, final int preDrawMargin) {
     // draw tiles near us if we have nothing left to draw
-    // that way when we scroll slowly we wont notice a glitch
+    // that way when we scroll slowly we won't notice a glitch
     if (undrawnTiles.isEmpty()) {
       final Rectangle2D extendedBounds =
           new Rectangle2D.Double(
@@ -841,6 +855,8 @@ public class MapPanel extends ImageScrollerLargeView {
   @Override
   public void setScale(final double newScale) {
     super.setScale(newScale);
+    zoomMapListeners.forEach(
+        (zoomMapListener -> zoomMapListener.zoomMapChanged((int) (scale * 100))));
     // setScale will check bounds, and normalize the scale correctly
     uiContext.setScale(scale);
     repaint();
@@ -857,7 +873,7 @@ public class MapPanel extends ImageScrollerLargeView {
     smallMapImageManager.updateOffscreenImage(uiContext.getMapImage().getSmallMapImage());
   }
 
-  public void setMouseShadowUnits(final Collection<Unit> units) {
+  public void setMouseShadowUnits(final @Nullable Collection<Unit> units) {
     if (units == null || units.isEmpty()) {
       movementLeftForCurrentUnits = "";
       mouseShadowImage = null;
@@ -882,7 +898,8 @@ public class MapPanel extends ImageScrollerLargeView {
       }
     }
 
-    final Set<UnitCategory> categories = UnitSeparator.categorize(units);
+    final List<UnitCategory> categories =
+        UnitSeparator.getSortedUnitCategories(units, gameData, uiContext.getMapData());
     final int iconWidth = uiContext.getUnitImageFactory().getUnitImageWidth();
     final int iconHeight = uiContext.getUnitImageFactory().getUnitImageHeight();
     final int horizontalSpace = 5;
@@ -961,18 +978,10 @@ public class MapPanel extends ImageScrollerLargeView {
     tileManager.clearTerritoryOverlay(territory, gameData, uiContext.getMapData());
   }
 
-  public UiContext getUiContext() {
-    return uiContext;
-  }
-
   public void hideMouseCursor() {
     if (hiddenCursor == null) {
-      hiddenCursor =
-          getToolkit()
-              .createCustomCursor(
-                  new BufferedImage(1, 1, BufferedImage.TYPE_4BYTE_ABGR),
-                  new Point(0, 0),
-                  "Hidden");
+      final var image = new BufferedImage(1, 1, BufferedImage.TYPE_4BYTE_ABGR);
+      hiddenCursor = getToolkit().createCustomCursor(image, new Point(), "Hidden");
     }
     setCursor(hiddenCursor);
   }

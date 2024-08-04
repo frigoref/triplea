@@ -162,10 +162,12 @@ public class DownloadMapsWindow extends JFrame {
     sb.append("<html>").append(map.getMapName()).append(doubleSpace);
 
     if (!downloadMapsWindowModel.isInstalled(map)) {
-      sb.append(doubleSpace)
-          .append(" (")
-          .append(FileUtils.byteCountToDisplaySize(map.getDownloadSizeInBytes()))
-          .append(")");
+      if (map.getDownloadSizeInBytes() != -1L) {
+        sb.append(doubleSpace)
+            .append(" (")
+            .append(FileUtils.byteCountToDisplaySize(map.getDownloadSizeInBytes()))
+            .append(")");
+      }
     } else {
       downloadMapsWindowModel
           .getInstallLocation(map)
@@ -233,11 +235,12 @@ public class DownloadMapsWindow extends JFrame {
         mapList.getOutOfDateExcluding(pendingDownloads);
     // For the UX, always show an available maps tab, even if it is empty
     final JPanel available =
-        newMapSelectionPanel(mapList.getAvailableExcluding(pendingDownloads), MapAction.INSTALL);
+        newMapSelectionPanel(
+            mapList.getAvailableExcluding(pendingDownloads), MapAction.INSTALL, true);
     tabbedPane.addTab("New Maps", available);
 
     if (!outOfDateDownloads.isEmpty()) {
-      final JPanel outOfDate = newMapSelectionPanel(outOfDateDownloads, MapAction.UPDATE);
+      final JPanel outOfDate = newMapSelectionPanel(outOfDateDownloads, MapAction.UPDATE, false);
       tabbedPane.addTab("Updates Available", outOfDate);
     }
 
@@ -247,14 +250,17 @@ public class DownloadMapsWindow extends JFrame {
               mapList.getInstalled().keySet().stream()
                   .sorted(Comparator.comparing(m -> m.getMapName().toUpperCase()))
                   .collect(Collectors.toList()),
-              MapAction.REMOVE);
+              MapAction.REMOVE,
+              false);
       tabbedPane.addTab("Installed", installed);
     }
     return tabbedPane;
   }
 
   private JPanel newMapSelectionPanel(
-      final List<MapDownloadItem> unsortedMaps, final MapAction action) {
+      final List<MapDownloadItem> unsortedMaps,
+      final MapAction action,
+      final boolean requestFocus) {
     final JPanel main = new JPanelBuilder().border(30).borderLayout().build();
     final JEditorPane descriptionPane = SwingComponents.newHtmlJEditorPane();
     main.add(SwingComponents.newJScrollPane(descriptionPane), BorderLayout.CENTER);
@@ -264,6 +270,9 @@ public class DownloadMapsWindow extends JFrame {
     if (!unsortedMaps.isEmpty()) {
       final MapDownloadSwingTable mapDownloadSwingTable = new MapDownloadSwingTable(unsortedMaps);
       final JTable gamesList = mapDownloadSwingTable.getSwingComponent();
+      if (requestFocus) {
+        SwingUtilities.invokeLater(() -> gamesList.requestFocus());
+      }
       mapDownloadSwingTable.addMapSelectionListener(
           mapSelections ->
               newDescriptionPanelUpdatingSelectionListener(

@@ -12,6 +12,7 @@ import org.triplea.http.client.maps.listing.MapDownloadItem;
 final class MapDownloadProgressListener {
   private final MapDownloadItem download;
   private final JProgressBar progressBar;
+
   /** The amount total that we will be downloading. */
   private final long downloadLength;
 
@@ -27,7 +28,7 @@ final class MapDownloadProgressListener {
         () -> {
           progressBar.setIndeterminate(false);
           progressBar.setString(null);
-          progressBar.setValue(percentComplete);
+          progressBar.setValue(Math.max(0, percentComplete));
           progressBar.setToolTipText(toolTipText);
         });
   }

@@ -3,9 +3,11 @@ package games.strategy.engine.framework.map.file.system.loader;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import games.strategy.engine.ClientFileSystemHelper;
+import games.strategy.engine.framework.GameRunner;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.Collection;
 import java.util.Optional;
 import java.util.function.Consumer;
@@ -17,7 +19,6 @@ import org.triplea.io.FileUtils;
 import org.triplea.io.ZipExtractor;
 import org.triplea.io.ZipExtractor.FileSystemException;
 import org.triplea.io.ZipExtractor.ZipReadException;
-import org.triplea.java.collections.CollectionUtils;
 import org.triplea.map.description.file.MapDescriptionYaml;
 
 /**
@@ -59,27 +60,33 @@ public class ZippedMapsExtractor {
                         // Before 2.6 maps did not include a 'map.yaml' file and were zipped.
                         .ifPresent(MapDescriptionYaml::generateForMap);
                   } catch (final ZipReadException zipReadException) {
-                    // Problem reading the zip, move it to a folder so that the user does
-                    // not repeatedly see an error trying to read this zip.
-                    moveBadZip(mapZip)
-                        .ifPresent(
-                            newLocation ->
-                                log.warn(
-                                    "Error extracting map zip: "
-                                        + mapZip.toAbsolutePath()
-                                        + ", zip has been moved to: "
-                                        + newLocation.toAbsolutePath(),
-                                    zipReadException));
+                    if (GameRunner.headless()) {
+                      log.warn(
+                          "Error reading zip file: {}, deleting the file.",
+                          mapZip,
+                          zipReadException);
+                      FileUtils.delete(mapZip);
+                    } else {
+                      // Problem reading the zip, move it to a folder so that the user does
+                      // not repeatedly see an error trying to read this zip.
+                      moveBadZip(mapZip)
+                          .ifPresent(
+                              newLocation ->
+                                  log.warn(
+                                      "Error extracting map zip: {}, zip has been moved to: {}",
+                                      mapZip.toAbsolutePath(),
+                                      newLocation.toAbsolutePath(),
+                                      zipReadException));
+                    }
                   } catch (final FileSystemException e) {
                     // Thrown if we are are out of disk space or have file system access issues.
                     // Do not move the zip file to a bad-zip folder as that operation could also
                     // fail.
-                    log.warn("Error extracting map zip: " + mapZip + ", " + e.getMessage(), e);
+                    log.warn("Error extracting map zip: {}, {}", mapZip, e.getMessage(), e);
                   } catch (final ZipExtractor.ZipSecurityException e) {
                     log.error(
-                        "Malicious zip file detected: "
-                            + mapZip.toAbsolutePath()
-                            + ", please report this to TripleA and delete the zip file",
+                        "Malicious zip file detected: {}, please report this to TripleA and delete the zip file",
+                        mapZip.toAbsolutePath(),
                         e);
                   }
                 }));
@@ -102,65 +109,49 @@ public class ZippedMapsExtractor {
    * @return Returns extracted location (if successful, otherwise empty)
    */
   public static Optional<Path> unzipMap(final Path mapZip) {
+    if (!Files.exists(mapZip)) {
+      String msg =
+          "Unexpected, cannot extract map zip, no file exists at: " + mapZip.toAbsolutePath();
+      if (GameRunner.headless()) {
+        log.warn(msg);
+      } else {
+        log.info(msg);
+      }
+      return Optional.empty();
+    }
     Preconditions.checkArgument(!Files.isDirectory(mapZip), mapZip.toAbsolutePath());
-    Preconditions.checkArgument(Files.exists(mapZip), mapZip.toAbsolutePath());
     Preconditions.checkArgument(
         mapZip.getFileName().toString().endsWith(".zip"), mapZip.toAbsolutePath());
 
     try {
-      return unzipMapThrowing(mapZip);
+      // extraction target is important, it is the folder path we seek to create with
+      // extracted map contents.
+      final Path mapsFolder = ClientFileSystemHelper.getUserMapsFolder();
+      final Path extractionTarget =
+          mapsFolder.resolve(computeExtractionFolderName(mapZip.getFileName().toString()));
+      log.info(
+          "Extracting map zip: {} -> {}",
+          mapZip.toAbsolutePath(),
+          extractionTarget.toAbsolutePath());
+      FileUtils.deleteDirectory(extractionTarget);
+      ZipExtractor.unzipFile(mapZip, extractionTarget);
+
+      // delete old properties file if they exists
+      final Path propertiesFile =
+          mapZip.resolveSibling(mapZip.getFileName().toString() + ".properties");
+      if (Files.exists(propertiesFile)) {
+        FileUtils.delete(propertiesFile);
+      }
+
+      final boolean successfullyExtracted = Files.exists(extractionTarget);
+      if (successfullyExtracted) {
+        Files.delete(mapZip);
+        return Optional.of(extractionTarget);
+      } else {
+        return Optional.empty();
+      }
     } catch (final IOException e) {
-      log.warn("Error extracting file: {}, {}", mapZip.toAbsolutePath() + ", " + e.getMessage(), e);
-      return Optional.empty();
-    }
-  }
-
-  // unzip map
-  // if previous folder exists then back it up
-  private static Optional<Path> unzipMapThrowing(final Path mapZip) throws IOException {
-    // extraction target is important, it is the folder path we seek to create with
-    // extracted map contents.
-    final Path mapsFolder = ClientFileSystemHelper.getUserMapsFolder();
-    final Path extractionTarget =
-        mapsFolder.resolve(computeExtractionFolderName(mapZip.getFileName().toString()));
-
-    log.info(
-        "Extracting map zip: {} -> {}", mapZip.toAbsolutePath(), extractionTarget.toAbsolutePath());
-
-    // extract into a temp folder first
-    // put the temp folder in the maps folder, so they're on the same partition (to move later)
-    final Path tempFolder = Files.createTempDirectory(mapsFolder, "triplea-unzip");
-    ZipExtractor.unzipFile(mapZip, tempFolder);
-    tempFolder.toFile().deleteOnExit();
-
-    // Typically, the next step is to move and rename the temp folder to the maps folder.
-    // But, if we just extracted exactly one folder, then we need to move and rename *that* folder.
-    final Collection<Path> files = FileUtils.listFiles(tempFolder);
-    final Path tempFolderWithExtractedMap =
-        files.size() == 1 && Files.isDirectory(CollectionUtils.getAny(files))
-            ? CollectionUtils.getAny(files)
-            : tempFolder;
-
-    // replace extraction target folder contents with the temp folder containing the extracted zip
-    final boolean folderReplaced =
-        FileUtils.replaceFolder(tempFolderWithExtractedMap, extractionTarget);
-    if (!folderReplaced) {
-      FileUtils.deleteDirectory(tempFolder);
-      return Optional.empty();
-    }
-
-    // delete properties file if it exists
-    final Path propertiesFile =
-        mapZip.resolveSibling(mapZip.getFileName().toString() + ".properties");
-    if (Files.exists(propertiesFile)) {
-      FileUtils.delete(propertiesFile);
-    }
-
-    final boolean successfullyExtracted = Files.exists(extractionTarget);
-    if (successfullyExtracted) {
-      Files.delete(mapZip);
-      return Optional.of(extractionTarget);
-    } else {
+      log.warn("Error extracting file: {}, {}", mapZip.toAbsolutePath(), e.getMessage(), e);
       return Optional.empty();
     }
   }
@@ -204,7 +195,7 @@ public class ZippedMapsExtractor {
     }
     try {
       final Path newLocation = badZipFolder.resolve(mapZip.getFileName());
-      Files.move(mapZip, newLocation);
+      Files.move(mapZip, newLocation, StandardCopyOption.REPLACE_EXISTING);
       return Optional.of(newLocation);
     } catch (final IOException e) {
       log.error(

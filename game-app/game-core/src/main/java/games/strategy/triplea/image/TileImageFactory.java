@@ -14,6 +14,7 @@ import java.io.IOException;
 import java.net.URL;
 import java.util.prefs.BackingStoreException;
 import java.util.prefs.Preferences;
+import javax.annotation.Nullable;
 import javax.imageio.ImageIO;
 import lombok.extern.slf4j.Slf4j;
 
@@ -106,7 +107,7 @@ public final class TileImageFactory {
     resourceLoader = loader;
   }
 
-  public Image getBaseTile(final int x, final int y) {
+  public @Nullable Image getBaseTile(final int x, final int y) {
     final String fileName = getBaseTileImageName(x, y);
     if (resourceLoader.getResource(fileName) == null) {
       return null;
@@ -119,7 +120,7 @@ public final class TileImageFactory {
     return "baseTiles" + "/" + x + "_" + y + ".png";
   }
 
-  private Image getImage(final String fileName, final boolean transparent) {
+  private @Nullable Image getImage(final String fileName, final boolean transparent) {
     final URL url = resourceLoader.getResource(fileName);
 
     if ((!showMapBlends || !showReliefImages || !transparent) && url == null) {
@@ -222,7 +223,7 @@ public final class TileImageFactory {
       fromFile.flush();
       return image;
     } catch (final IOException e) {
-      log.error("Could not load image, url: " + imageLocation.toString(), e);
+      log.error("Could not load image, url: " + imageLocation, e);
       return new BufferedImage(1, 1, BufferedImage.TYPE_INT_RGB);
     }
   }

@@ -121,8 +121,7 @@ public class RocketsFireHelper implements Serializable {
           break;
         }
         final Collection<Unit> enemyUnits =
-            CollectionUtils.getMatches(
-                targetTerritory.getUnitCollection(),
+            targetTerritory.getMatches(
                 Matches.enemyUnit(player).and(Matches.unitIsBeingTransported().negate()));
         final Collection<Unit> enemyTargetsTotal =
             CollectionUtils.getMatches(
@@ -130,8 +129,7 @@ public class RocketsFireHelper implements Serializable {
         Unit unitTarget = null;
         if (Properties.getDamageFromBombingDoneToUnitsInsteadOfTerritories(data.getProperties())) {
           final Collection<Unit> rocketTargets =
-              new ArrayList<>(
-                  CollectionUtils.getMatches(attackFrom.getUnits(), rocketMatch(player)));
+              CollectionUtils.getMatches(attackFrom.getUnits(), rocketMatch(player));
           final HashSet<UnitType> legalTargetsForTheseRockets = new HashSet<>();
           // a hack for now, we let the rockets fire at anyone who could be targeted by any rocket
           // Not sure if that comment is still current
@@ -263,9 +261,8 @@ public class RocketsFireHelper implements Serializable {
         Properties.getDamageFromBombingDoneToUnitsInsteadOfTerritories(data.getProperties());
     // unit damage vs territory damage
     final Collection<Unit> enemyUnits =
-        attackedTerritory
-            .getUnitCollection()
-            .getMatches(Matches.enemyUnit(player).and(Matches.unitIsBeingTransported().negate()));
+        attackedTerritory.getMatches(
+            Matches.enemyUnit(player).and(Matches.unitIsBeingTransported().negate()));
     final Collection<Unit> enemyTargetsTotal =
         CollectionUtils.getMatches(
             enemyUnits, Matches.unitIsAtMaxDamageOrNotCanBeDamaged(attackedTerritory).negate());

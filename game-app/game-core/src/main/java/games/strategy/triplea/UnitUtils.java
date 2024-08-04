@@ -5,6 +5,7 @@ import games.strategy.engine.data.CompositeChange;
 import games.strategy.engine.data.GamePlayer;
 import games.strategy.engine.data.Territory;
 import games.strategy.engine.data.Unit;
+import games.strategy.engine.data.UnitType;
 import games.strategy.engine.data.changefactory.ChangeFactory;
 import games.strategy.engine.data.properties.GameProperties;
 import games.strategy.triplea.attachments.TerritoryAttachment;
@@ -14,7 +15,10 @@ import games.strategy.triplea.delegate.TechTracker;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Predicate;
+import java.util.stream.Collectors;
+import javax.annotation.Nullable;
 import lombok.experimental.UtilityClass;
 import org.triplea.java.collections.CollectionUtils;
 import org.triplea.java.collections.IntegerMap;
@@ -28,24 +32,19 @@ import org.triplea.java.collections.IntegerMap;
 @UtilityClass
 public class UnitUtils {
 
+  public static Set<UnitType> getUnitTypesFromUnitList(final Collection<Unit> units) {
+    return units.stream().map(Unit::getType).collect(Collectors.toSet());
+  }
+
   public static int getProductionPotentialOfTerritory(
       final Collection<Unit> unitsAtStartOfStepInTerritory,
       final Territory producer,
       final GamePlayer player,
-      final GameProperties properties,
       final boolean accountForDamage,
       final boolean mathMaxZero) {
     return getHowMuchCanUnitProduce(
-        getBiggestProducer(
-            unitsAtStartOfStepInTerritory,
-            producer,
-            player,
-            player.getData().getTechTracker(),
-            properties,
-            accountForDamage),
+        getBiggestProducer(unitsAtStartOfStepInTerritory, producer, player, accountForDamage),
         producer,
-        player.getData().getTechTracker(),
-        properties,
         accountForDamage,
         mathMaxZero);
   }
@@ -57,12 +56,10 @@ public class UnitUtils {
    * @param accountForDamage {@code true} if the production capacity should account for unit damage;
    *     otherwise {@code false}.
    */
-  public static Unit getBiggestProducer(
+  public static @Nullable Unit getBiggestProducer(
       final Collection<Unit> units,
       final Territory producer,
       final GamePlayer player,
-      final TechTracker techTracker,
-      final GameProperties properties,
       final boolean accountForDamage) {
     final Predicate<Unit> factoryMatch =
         Matches.unitIsOwnedAndIsFactoryOrCanProduceUnits(player)
@@ -76,8 +73,7 @@ public class UnitUtils {
     Unit highestUnit = CollectionUtils.getAny(factories);
     int highestCapacity = Integer.MIN_VALUE;
     for (final Unit u : factories) {
-      final int capacity =
-          getHowMuchCanUnitProduce(u, producer, techTracker, properties, accountForDamage, false);
+      final int capacity = getHowMuchCanUnitProduce(u, producer, accountForDamage, false);
       productionPotential.put(u, capacity);
       if (capacity > highestCapacity) {
         highestCapacity = capacity;
@@ -96,10 +92,8 @@ public class UnitUtils {
    *     {@code false} to allow a negative production capacity.
    */
   public static int getHowMuchCanUnitProduce(
-      final Unit unit,
+      final @Nullable Unit unit,
       final Territory producer,
-      final TechTracker techTracker,
-      final GameProperties properties,
       final boolean accountForDamage,
       final boolean mathMaxZero) {
     if (unit == null) {
@@ -117,6 +111,7 @@ public class UnitUtils {
       territoryUnitProduction = ta.getUnitProduction();
     }
     int productionCapacity;
+    final GameProperties properties = producer.getData().getProperties();
     if (accountForDamage) {
       if (Properties.getDamageFromBombingDoneToUnitsInsteadOfTerritories(properties)) {
         if (ua.getCanProduceXUnits() < 0) {
@@ -150,7 +145,8 @@ public class UnitUtils {
             (Properties.getWW2V2(properties) || Properties.getWW2V3(properties)) ? 0 : 1;
       }
     }
-    // Increase production if have industrial technology
+    final TechTracker techTracker = producer.getData().getTechTracker();
+    // Increase production if we have industrial technology
     if (territoryProduction
         >= techTracker.getMinimumTerritoryValueForProductionBonus(unit.getOwner())) {
       productionCapacity += techTracker.getProductionBonus(unit.getOwner(), unit.getType());
@@ -240,5 +236,22 @@ public class UnitUtils {
               IntegerMap.of(Map.of(receivingUnit, transferDamage)), List.of(territory)));
     }
     return unitChange;
+  }
+
+  public static @Nullable GamePlayer findPlayerWithMostUnits(final Iterable<Unit> units) {
+    final IntegerMap<GamePlayer> playerUnitCount = new IntegerMap<>();
+    for (final Unit unit : units) {
+      playerUnitCount.add(unit.getOwner(), 1);
+    }
+    int max = -1;
+    GamePlayer player = null;
+    for (final GamePlayer current : playerUnitCount.keySet()) {
+      final int count = playerUnitCount.getInt(current);
+      if (count > max) {
+        max = count;
+        player = current;
+      }
+    }
+    return player;
   }
 }

@@ -14,12 +14,9 @@ import games.strategy.engine.framework.GameDataManager;
 import games.strategy.engine.framework.GameObjectStreamFactory;
 import games.strategy.engine.framework.GameRunner;
 import games.strategy.engine.framework.GameState;
-import games.strategy.engine.framework.HeadlessAutoSaveType;
 import games.strategy.engine.framework.message.PlayerListing;
 import games.strategy.engine.framework.network.ui.ChangeGameOptionsClientAction;
 import games.strategy.engine.framework.network.ui.ChangeGameToSaveGameClientAction;
-import games.strategy.engine.framework.network.ui.ChangeToAutosaveClientAction;
-import games.strategy.engine.framework.network.ui.GetGameSaveClientAction;
 import games.strategy.engine.framework.network.ui.SetMapClientAction;
 import games.strategy.engine.framework.startup.launcher.IServerReady;
 import games.strategy.engine.framework.startup.launcher.LaunchAction;
@@ -54,7 +51,6 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 import javax.annotation.Nonnull;
-import javax.swing.Action;
 import javax.swing.JOptionPane;
 import javax.swing.SwingUtilities;
 import lombok.Builder;
@@ -87,7 +83,7 @@ public class ClientModel implements IMessengerErrorListener {
   private IClientMessenger messenger;
   private ClientNetworkBridge clientNetworkBridge;
   private Component ui;
-  private ChatPanel chatPanel;
+  @Getter private ChatPanel chatPanel;
   private ClientGame game;
   private boolean hostIsHeadlessBot = false;
   // we set the game data to be null, since we are a client game, and the game data lives on the
@@ -300,10 +296,6 @@ public class ClientModel implements IMessengerErrorListener {
     return (IServerStartupRemote) messengers.getRemote(ServerModel.SERVER_REMOTE_NAME);
   }
 
-  private Collection<String> getAvailableServerGames() {
-    return getServerStartup().getAvailableGames();
-  }
-
   /** Resets stats and nulls out references, keeps chat alive. */
   public void cancel() {
     gameSelectorModel.setGameData(gameDataOnStartup);
@@ -312,7 +304,9 @@ public class ClientModel implements IMessengerErrorListener {
       messenger.shutDown();
       messenger.removeErrorListener(this);
       objectStreamFactory.setData(null);
-      chatPanel.deleteChat();
+      if (chatPanel != null) {
+        chatPanel.deleteChat();
+      }
       hostIsHeadlessBot = false;
       gameSelectorModel.setIsHostHeadlessBot(false);
       gameSelectorModel.setClientModelForHostBots(null);
@@ -449,10 +443,6 @@ public class ClientModel implements IMessengerErrorListener {
         JOptionPane.ERROR_MESSAGE);
   }
 
-  public ChatPanel getChatPanel() {
-    return chatPanel;
-  }
-
   private boolean getIsServerHeadlessTest() {
     final IServerStartupRemote serverRemote = getServerStartup();
     hostIsHeadlessBot = serverRemote != null && serverRemote.getIsServerHeadless();
@@ -467,8 +457,7 @@ public class ClientModel implements IMessengerErrorListener {
     Preconditions.checkState(SwingUtilities.isEventDispatchThread(), "Should be run on EDT!");
     ThreadRunner.runInNewThread(
         () -> {
-          final var action =
-              new SetMapClientAction(parent, getServerStartup(), getAvailableServerGames());
+          final var action = new SetMapClientAction(parent, getServerStartup());
           SwingUtilities.invokeLater(action::run);
         });
   }
@@ -484,17 +473,8 @@ public class ClientModel implements IMessengerErrorListener {
         });
   }
 
-  public Action getHostBotChangeGameToSaveGameClientAction(final Frame owner) {
-    return new ChangeGameToSaveGameClientAction(getServerStartup(), owner);
-  }
-
-  public Action getHostBotChangeToAutosaveClientAction(
-      final Component parent, final HeadlessAutoSaveType autosaveType) {
-    return new ChangeToAutosaveClientAction(parent, getServerStartup(), autosaveType);
-  }
-
-  public Action getHostBotGetGameSaveClientAction(final Component parent) {
-    return new GetGameSaveClientAction(parent, getServerStartup(), gameDataOnStartup);
+  public void executeChangeGameToSaveGameClientAction(final Frame owner) {
+    ChangeGameToSaveGameClientAction.execute(getServerStartup(), owner);
   }
 
   /** Simple data object for which host we are connecting to and with which name. */

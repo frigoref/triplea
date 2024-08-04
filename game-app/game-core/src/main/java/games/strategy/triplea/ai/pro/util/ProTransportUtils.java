@@ -2,7 +2,6 @@ package games.strategy.triplea.ai.pro.util;
 
 import static java.util.function.Predicate.not;
 
-import com.google.common.collect.ImmutableList;
 import games.strategy.engine.data.GamePlayer;
 import games.strategy.engine.data.GameState;
 import games.strategy.engine.data.Territory;
@@ -66,7 +65,7 @@ public final class ProTransportUtils {
           ProMatches.unitIsOwnedTransportableUnitAndCanBeLoaded(player, transport, true);
       final List<Unit> units = new ArrayList<>();
       for (final Territory loadFrom : territoriesToLoadFrom) {
-        units.addAll(loadFrom.getUnitCollection().getMatches(canBeLoaded));
+        units.addAll(loadFrom.getMatches(canBeLoaded));
       }
       units.removeAll(unitsToIgnore);
 
@@ -114,7 +113,7 @@ public final class ProTransportUtils {
     // Get all units that can be transported
     final List<Unit> units = new ArrayList<>();
     for (final Territory loadFrom : territoriesToLoadFrom) {
-      units.addAll(loadFrom.getUnitCollection().getMatches(validUnitMatch));
+      units.addAll(loadFrom.getMatches(validUnitMatch));
     }
     units.removeAll(unitsToIgnore);
 
@@ -224,11 +223,10 @@ public final class ProTransportUtils {
       return List.of(unit);
     }
     final List<Unit> units =
-        t.getUnitCollection()
-            .getMatches(
-                Matches.unitIsOwnedBy(player)
-                    .and(Matches.unitIsLandTransportable())
-                    .and(ProMatches.unitHasLessMovementThan(unit)));
+        t.getMatches(
+            Matches.unitIsOwnedBy(player)
+                .and(Matches.unitIsLandTransportable())
+                .and(ProMatches.unitHasLessMovementThan(unit)));
     units.removeAll(usedUnits);
     if (units.isEmpty()) {
       return List.of(unit);
@@ -247,7 +245,7 @@ public final class ProTransportUtils {
               .thenComparing(getDecreasingAttackComparator(player)));
       results.addAll(selectUnitsToTransportFromList(unit, units));
     }
-    return ImmutableList.copyOf(results);
+    return Collections.unmodifiableList(results);
   }
 
   private static Comparator<Unit> getDecreasingAttackComparator(final GamePlayer player) {
@@ -337,8 +335,7 @@ public final class ProTransportUtils {
     final List<Unit> ownedNearbyUnits = new ArrayList<>();
     int capacity = 0;
     for (final Territory nearbyTerritory : nearbyTerritories) {
-      final List<Unit> units =
-          nearbyTerritory.getUnitCollection().getMatches(Matches.unitIsOwnedBy(player));
+      final List<Unit> units = nearbyTerritory.getMatches(Matches.unitIsOwnedBy(player));
       if (nearbyTerritory.equals(t)) {
         units.addAll(unitsToPlace);
       }

@@ -1,6 +1,10 @@
 package games.strategy.engine.data;
 
+import javax.annotation.Nullable;
+import lombok.Getter;
+
 /** Fake attachment used for testing. */
+@Getter
 public class TestAttachment extends DefaultAttachment {
   private static final long serialVersionUID = 4886924951201479496L;
 
@@ -19,7 +23,7 @@ public class TestAttachment extends DefaultAttachment {
   public void setAttachedTo(final Attachable unused) {}
 
   @Override
-  public String getName() {
+  public @Nullable String getName() {
     return null;
   }
 
@@ -30,10 +34,6 @@ public class TestAttachment extends DefaultAttachment {
     this.value = value;
   }
 
-  public String getValue() {
-    return value;
-  }
-
   public void resetValue() {
     value = null;
   }
@@ -42,7 +42,7 @@ public class TestAttachment extends DefaultAttachment {
   public void validate(final GameState data) {}
 
   @Override
-  public MutableProperty<?> getPropertyOrNull(String propertyName) {
+  public @Nullable MutableProperty<?> getPropertyOrNull(String propertyName) {
     switch (propertyName) {
       case "value":
         return MutableProperty.ofString(this::setValue, this::getValue, this::resetValue);

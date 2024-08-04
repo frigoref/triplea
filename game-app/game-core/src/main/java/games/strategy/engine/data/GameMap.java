@@ -4,6 +4,7 @@ import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
+import games.strategy.engine.data.util.BreadthFirstSearch;
 import games.strategy.triplea.delegate.Matches;
 import java.math.BigDecimal;
 import java.util.ArrayList;
@@ -43,7 +44,7 @@ public class GameMap extends GameDataComponent implements Iterable<Territory> {
   @SuppressWarnings("unused")
   @Deprecated
   @RemoveOnNextMajorRelease
-  private int[] gridDimensions = null;
+  private final int[] gridDimensions = null;
 
   GameMap(final GameData data) {
     super(data);
@@ -86,7 +87,7 @@ public class GameMap extends GameDataComponent implements Iterable<Territory> {
    *
    * @param s name of the searched territory (case sensitive)
    */
-  public Territory getTerritory(final String s) {
+  public @Nullable Territory getTerritory(final String s) {
     return territoryLookup.get(s);
   }
 
@@ -294,8 +295,7 @@ public class GameMap extends GameDataComponent implements Iterable<Territory> {
    *
    * @param cond condition that covered territories of the route must match
    */
-  @Nullable
-  public Route getRoute(
+  public @Nullable Route getRoute(
       final Territory start, final Territory end, final Predicate<Territory> cond) {
     checkNotNull(start);
     checkNotNull(end);
@@ -305,8 +305,7 @@ public class GameMap extends GameDataComponent implements Iterable<Territory> {
   }
 
   /** See {@link #getRouteForUnits(Territory, Territory, Predicate, Collection, GamePlayer)}. */
-  @Nullable
-  public Route getRouteForUnit(
+  public @Nullable Route getRouteForUnit(
       final Territory start,
       final Territory end,
       final Predicate<Territory> cond,
@@ -326,8 +325,7 @@ public class GameMap extends GameDataComponent implements Iterable<Territory> {
    * @param units checked against canals and for movement costs
    * @param player player used to check canal ownership
    */
-  @Nullable
-  public Route getRouteForUnits(
+  public @Nullable Route getRouteForUnits(
       final Territory start,
       final Territory end,
       final Predicate<Territory> cond,
@@ -375,37 +373,9 @@ public class GameMap extends GameDataComponent implements Iterable<Territory> {
     if (t1.equals(t2)) {
       return 0;
     }
-    return getDistance(0, new HashSet<>(), Set.of(t1), t2, routeCond);
-  }
-
-  /**
-   * Guaranteed that frontier doesn't contain target. Territories on the frontier are not target.
-   * They represent the extent of paths already searched. Territories in searched have already been
-   * on the frontier.
-   */
-  private int getDistance(
-      final int distance,
-      final Set<Territory> searched,
-      final Set<Territory> frontier,
-      final Territory target,
-      final BiPredicate<Territory, Territory> routeCond) {
-
-    // add the frontier to the searched
-    searched.addAll(frontier);
-    // find the new frontier
-
-    final Set<Territory> newFrontier =
-        frontier.stream()
-            .flatMap(f -> getNeighbors(f, routeCond).stream())
-            .collect(Collectors.toSet());
-    if (newFrontier.contains(target)) {
-      return distance + 1;
-    }
-    newFrontier.removeAll(searched);
-    if (newFrontier.isEmpty()) {
-      return -1;
-    }
-    return getDistance(distance + 1, searched, newFrontier, target, routeCond);
+    var territoryFinder = new BreadthFirstSearch.TerritoryFinder(t2);
+    new BreadthFirstSearch(List.of(t1), routeCond).traverse(territoryFinder);
+    return territoryFinder.getDistanceFound();
   }
 
   public IntegerMap<Territory> getDistance(

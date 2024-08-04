@@ -77,6 +77,7 @@ public class MapDescriptionYaml {
   @EqualsAndHashCode
   public static class MapGame {
     private final String gameName;
+
     /** Path of the XML file relative to the location of map.yml file. */
     private final String xmlFileName;
   }
@@ -144,7 +145,10 @@ public class MapDescriptionYaml {
     }
 
     if (!validationErrors.isEmpty()) {
-      log.warn("Error found in: {}, errors: {}", sourceFile.toAbsolutePath(), validationErrors);
+      log.info(
+          "Warning: invalid map found installed: {}, errors: {}",
+          sourceFile.toAbsolutePath(),
+          validationErrors);
     }
 
     return validationErrors.isEmpty();

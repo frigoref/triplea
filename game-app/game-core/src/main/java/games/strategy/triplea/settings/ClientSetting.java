@@ -26,7 +26,6 @@ import javax.annotation.Nullable;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
-import org.triplea.http.client.maps.listing.MapsClient;
 import org.triplea.java.ThreadRunner;
 
 /**
@@ -126,6 +125,8 @@ public abstract class ClientSetting<T> implements GameSetting<T> {
       new BooleanClientSetting("SHOW_BATTLES_WHEN_OBSERVING", true);
   public static final ClientSetting<Boolean> showBetaFeatures =
       new BooleanClientSetting("SHOW_BETA_FEATURES");
+  public static final ClientSetting<Boolean> useMapsServerBetaFeature =
+      new BooleanClientSetting("USE_MAPS_SERVER_BETA_FEATURES");
   public static final ClientSetting<Boolean> useWebsocketNetwork =
       new BooleanClientSetting("USE_WEBSOCKET_NETWORK");
   public static final ClientSetting<Boolean> showSerializeFeatures =
@@ -149,10 +150,6 @@ public abstract class ClientSetting<T> implements GameSetting<T> {
           UnitsDrawer.UnitFlagDrawMode.class,
           "UNIT_FLAG_DRAW_MODE",
           UnitsDrawer.UnitFlagDrawMode.NONE);
-  public static final ClientSetting<Path> userMapsFolderPath =
-      new PathClientSetting(
-          "USER_MAPS_FOLDER_PATH",
-          ClientFileSystemHelper.getUserRootFolder().resolve(MapsClient.MAPS_FOLDER_NAME));
   public static final ClientSetting<Integer> wheelScrollAmount =
       new IntegerClientSetting("WHEEL_SCROLL_AMOUNT", 60);
   public static final ClientSetting<String> playerName =

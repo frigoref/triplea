@@ -19,6 +19,7 @@ public class AddUnits extends Change {
   private final String name;
   private final Collection<Unit> units;
   private final String type;
+
   /**
    * The unit's owner can be modified sometime after this Change is created but before it is
    * performed. To ensure that the newly created units have the correct ownership, their original
@@ -43,16 +44,7 @@ public class AddUnits extends Change {
 
   /** Returns an unmodifiable map of unit UUIDs to player names. */
   public static Map<UUID, String> buildUnitOwnerMap(final Collection<Unit> units) {
-    return units.stream()
-        .collect(
-            Collectors.toMap(
-                Unit::getId,
-                unit -> {
-                  if (unit.getOwner() == null || unit.getOwner().getName() == null) {
-                    return unit.getData().getPlayerList().getNullPlayer().getName();
-                  }
-                  return unit.getOwner().getName();
-                }));
+    return units.stream().collect(Collectors.toMap(Unit::getId, u -> u.getOwner().getName()));
   }
 
   @Override

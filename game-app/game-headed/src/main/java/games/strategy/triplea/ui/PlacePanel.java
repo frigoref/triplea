@@ -8,6 +8,7 @@ import games.strategy.engine.data.GameStep;
 import games.strategy.engine.data.Territory;
 import games.strategy.engine.data.Unit;
 import games.strategy.engine.data.events.GameDataChangeListener;
+import games.strategy.engine.data.properties.GameProperties;
 import games.strategy.engine.player.PlayerBridge;
 import games.strategy.triplea.Properties;
 import games.strategy.triplea.attachments.PlayerAttachment;
@@ -17,12 +18,11 @@ import games.strategy.triplea.delegate.data.PlaceableUnits;
 import games.strategy.triplea.delegate.remote.IAbstractPlaceDelegate;
 import games.strategy.triplea.ui.panels.map.MapPanel;
 import games.strategy.triplea.ui.panels.map.MapSelectionListener;
-import games.strategy.triplea.util.UnitCategory;
-import games.strategy.triplea.util.UnitSeparator;
 import java.awt.Component;
 import java.awt.Dimension;
 import java.awt.Toolkit;
 import java.awt.event.MouseEvent;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
@@ -112,7 +112,7 @@ class PlacePanel extends AbstractMovePanel implements GameDataChangeListener {
   }
 
   private void updateStep() {
-    final Collection<UnitCategory> unitsToPlace;
+    final Collection<Unit> unitsToPlace;
     final boolean showUnitsToPlace;
     final GameData data = getData();
     try (GameData.Unlocker ignored = data.acquireReadLock()) {
@@ -133,7 +133,7 @@ class PlacePanel extends AbstractMovePanel implements GameDataChangeListener {
       // If we're past the production step (even if player didn't produce anything) or
       // there are units that are available to place, show the panel (set unitsToPlace).
       showUnitsToPlace = (postProductionStep || !playerUnits.isEmpty());
-      unitsToPlace = showUnitsToPlace ? UnitSeparator.categorize(playerUnits) : null;
+      unitsToPlace = showUnitsToPlace ? playerUnits : List.of();
       if (GameStep.isPurchaseOrBidStep(step.getName())) {
         postProductionStep = true;
       }
@@ -146,29 +146,40 @@ class PlacePanel extends AbstractMovePanel implements GameDataChangeListener {
       }
     }
 
-    SwingUtilities.invokeLater(
-        () -> {
-          if (showUnitsToPlace) {
-            unitsToPlacePanel.setUnitsFromCategories(unitsToPlace);
+    if (showUnitsToPlace) {
+      // Small hack: copy the unit list before passing it to a new thread.
+      // This is to prevent ConcurrentModification. If the 'unitsToPlace' list is modified
+      // later in this thread, before "SwingUtilities.invokeLater" can execute and complete,
+      // then we will get a ConcurrentModification exception.
+      // Ideally we would not modify the 'unitsToPlace' collection again except when
+      // the swing thread signals that the user has taken action.. Short of that, we create a copy
+      // here.
+      final Collection<Unit> unitsToPlaceCopy = new ArrayList<>(unitsToPlace);
+      SwingUtilities.invokeLater(
+          () -> {
+            unitsToPlacePanel.setUnits(unitsToPlaceCopy);
             SwingComponents.redraw(unitsToPlacePanel);
-          } else {
-            unitsToPlacePanel.removeAll();
-          }
-        });
+          });
+    } else {
+      SwingUtilities.invokeLater(unitsToPlacePanel::removeAll);
+    }
   }
 
   @Override
   public void gameDataChanged(final Change change) {
-    final Collection<UnitCategory> unitsToPlace;
+    final Collection<Unit> unitsToPlace;
     final GameData data = getData();
     try (GameData.Unlocker ignored = data.acquireReadLock()) {
       final GamePlayer player = data.getSequence().getStep().getPlayerId();
-      unitsToPlace = UnitSeparator.categorize(player.getUnits());
+      if (player == null) {
+        return;
+      }
+      unitsToPlace = player.getUnits();
     }
 
     SwingUtilities.invokeLater(
         () -> {
-          unitsToPlacePanel.setUnitsFromCategories(unitsToPlace);
+          unitsToPlacePanel.setUnits(unitsToPlace);
           unitsToPlacePanel.revalidate();
           unitsToPlacePanel.repaint();
         });
@@ -205,9 +216,7 @@ class PlacePanel extends AbstractMovePanel implements GameDataChangeListener {
       if (!territory.isWater() && !territory.isOwnedBy(getCurrentPlayer())) {
         if (GameStepPropertiesHelper.isBid(getData())) {
           final PlayerAttachment pa = PlayerAttachment.get(territory.getOwner());
-          if ((pa == null
-                  || pa.getGiveUnitControl() == null
-                  || !pa.getGiveUnitControl().contains(getCurrentPlayer()))
+          if ((pa == null || !pa.getGiveUnitControl().contains(getCurrentPlayer()))
               && !territory.anyUnitsMatch(Matches.unitIsOwnedBy(getCurrentPlayer()))) {
             return new PlaceableUnits();
           }
@@ -218,9 +227,10 @@ class PlacePanel extends AbstractMovePanel implements GameDataChangeListener {
       // get the units that can be placed on this territory.
       Collection<Unit> units = getCurrentPlayer().getUnits();
       if (territory.isWater()) {
-        if (!(Properties.getProduceFightersOnCarriers(getData().getProperties())
-            || Properties.getProduceNewFightersOnOldCarriers(getData().getProperties())
-            || Properties.getLhtrCarrierProductionRules(getData().getProperties())
+        GameProperties properties = getData().getProperties();
+        if (!(Properties.getProduceFightersOnCarriers(properties)
+            || Properties.getProduceNewFightersOnOldCarriers(properties)
+            || Properties.getLhtrCarrierProductionRules(properties)
             || GameStepPropertiesHelper.isBid(getData()))) {
           units = CollectionUtils.getMatches(units, Matches.unitIsSea());
         } else {
@@ -240,8 +250,8 @@ class PlacePanel extends AbstractMovePanel implements GameDataChangeListener {
       if (production.isError()) {
         JOptionPane.showMessageDialog(
             getTopLevelAncestor(),
-            production.getErrorMessage(),
-            "No units",
+            production.getErrorMessage() + "\n\n",
+            "Cannot produce units",
             JOptionPane.INFORMATION_MESSAGE);
       }
       return production;
@@ -305,8 +315,6 @@ class PlacePanel extends AbstractMovePanel implements GameDataChangeListener {
   }
 
   private void updateUnits() {
-    final Collection<UnitCategory> unitCategories =
-        UnitSeparator.categorize(getCurrentPlayer().getUnits());
-    unitsToPlacePanel.setUnitsFromCategories(unitCategories);
+    unitsToPlacePanel.setUnits(getCurrentPlayer().getUnits());
   }
 }
