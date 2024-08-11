@@ -3,13 +3,14 @@ package games.strategy.engine.data.properties;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import java.util.List;
+import org.jetbrains.annotations.NonNls;
 import org.junit.jupiter.api.function.Executable;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
 
 final class NumberPropertyTest {
-  private static final String NAME = "name";
-  private static final String DESCRIPTION = "description";
+  @NonNls private static final String NAME = "name";
+  @NonNls private static final String DESCRIPTION = "description";
   private static final int MAX_VALUE = 100;
   private static final int MIN_VALUE = 0;
   private static final int DEFAULT_VALUE = 42;

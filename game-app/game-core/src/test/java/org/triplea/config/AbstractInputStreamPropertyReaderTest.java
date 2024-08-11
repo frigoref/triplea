@@ -18,7 +18,7 @@ import org.triplea.java.function.ThrowingSupplier;
 final class AbstractInputStreamPropertyReaderTest {
   @Nested
   final class ReadPropertyInternalTest {
-    private static final String PROPERTY_SOURCE_NAME = "propertySourceName";
+    @NonNls private static final String PROPERTY_SOURCE_NAME = "propertySourceName";
 
     private AbstractInputStreamPropertyReader newAbstractInputStreamPropertyReader(
         final ThrowingSupplier<InputStream, FileNotFoundException> inputStreamSupplier) {

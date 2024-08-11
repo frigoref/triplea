@@ -3,11 +3,12 @@ package org.triplea.debug;
 import games.strategy.triplea.UrlConstants;
 import java.util.Optional;
 import java.util.function.Function;
+import org.jetbrains.annotations.NonNls;
 import org.triplea.swing.JEditorPaneWithClickableLinks;
 
 /** Converts a 'LogRecord' to the text that we display to a user in an alert pop-up. */
 class ErrorMessageFormatter implements Function<LoggerRecord, String> {
-  static final String UNEXPECTED_ERROR_TEXT = "An unexpected error occurred!";
+  @NonNls static final String UNEXPECTED_ERROR_TEXT = "An unexpected error occurred!";
 
   @Override
   public String apply(final LoggerRecord logRecord) {
@@ -81,7 +82,7 @@ class ErrorMessageFormatter implements Function<LoggerRecord, String> {
   }
 
   /**
-   * Remove package names from a class name, eg: 'java.lang.RuntimeExcception' -> 'RuntimeException'
+   * Remove package names from a class name, eg: 'java.lang.RuntimeException' -> 'RuntimeException'
    */
   private static String formatExceptionClassName(String className) {
     return className.contains(".")

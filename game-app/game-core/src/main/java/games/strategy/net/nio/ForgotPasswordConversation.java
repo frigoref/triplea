@@ -14,7 +14,7 @@ import lombok.Builder;
 @Builder
 public class ForgotPasswordConversation {
 
-  public static final String TEMP_PASSWORD_GENERATED_RESPONSE = "password_reset";
+  @NonNls public static final String TEMP_PASSWORD_GENERATED_RESPONSE = "password_reset";
   @VisibleForTesting static final int MAX_TEMP_PASSWORD_REQUESTS_PER_DAY = 3;
 
   @Nonnull private final Predicate<String> forgotPasswordModule;

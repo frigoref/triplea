@@ -42,11 +42,11 @@ import org.triplea.java.UrlStreams;
  * This is the "key" that tells the engine which sound folder to use as the DEFAULT sound folder.
  * <br>
  * The default folders are as follows: <br>
- * "<b>ww2</b>" (which should cover ww1 - ww2 - ww3 sounds), <br>
- * "<b>preindustrial</b>" (anything from muskets/cannons (1500) to right before ww1 (1900), <br>
- * "<b>classical</b>" (the ancient era, anything before cannons became a mainstay (10,000 bce - 1500
+ * "<b>ww2</b>" which should cover ww1 - ww2 - ww3 sounds, <br>
+ * "<b>preindustrial</b>" anything from muskets/cannons (1500) to right before ww1 (1900), <br>
+ * "<b>classical</b>" the ancient era, anything before cannons became a mainstay (10,000 bce - 1500
  * ad) <br>
- * "<b>future</b>" (sci-fi, spaceships, lasers, etc) <br>
+ * "<b>future</b>" sci-fi, spaceships, lasers, etc. <br>
  * <br>
  * After this, you can specify specific sounds if you want, using the "sound key location" (aka:
  * sound map folder). <br>
@@ -109,9 +109,9 @@ import org.triplea.java.UrlStreams;
  */
 @Slf4j
 public class ClipPlayer {
-  private static final String ASSETS_SOUNDS_FOLDER = "sounds";
-  private static final String SOUND_PREFERENCE_PREFIX = "sound_";
-  private static final String MP3_SUFFIX = ".mp3";
+  @NonNls private static final String ASSETS_SOUNDS_FOLDER = "sounds";
+  @NonNls private static final String SOUND_PREFERENCE_PREFIX = "sound_";
+  @NonNls private static final String MP3_SUFFIX = ".mp3";
 
   private static final Set<String> mutedClips = ConcurrentHashMap.newKeySet();
 
@@ -264,7 +264,7 @@ public class ClipPlayer {
   /**
    * The user may or may not have a sounds.properties file. If they do not, we should have a default
    * folder (ww2) that we use for sounds. Because we do not want a lot of duplicate sound files, we
-   * also have a "generic" sound folder. If a sound cannot be found for a soundpath using the
+   * also have a "generic" sound folder. If a sound cannot be found for a sound path using the
    * sounds.properties or default folder, then we try to find one in the generic folder. The
    * sounds.properties file can specify all the sounds to use for a specific sound path (multiple
    * per path). If there is no key for that path, we try by the default way. <br>

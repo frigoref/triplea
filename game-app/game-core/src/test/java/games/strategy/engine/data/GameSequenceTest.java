@@ -13,7 +13,7 @@ import org.junit.jupiter.api.Test;
 final class GameSequenceTest {
   @Nested
   final class SetRoundAndStepTest {
-    private static final String GAME_STEP_NAME = "gameStep";
+    @NonNls private static final String GAME_STEP_NAME = "gameStep";
     private static final String OTHER_GAME_STEP_NAME = "otherGameStep";
 
     private final GameData gameData = new GameData();

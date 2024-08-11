@@ -12,8 +12,8 @@ import org.junit.jupiter.api.Test;
 
 /** A fixture for testing the basic aspects of classes that implement {@link PropertyReader}. */
 public abstract class AbstractPropertyReaderTestCase {
-  private static final String ABSENT_PROPERTY_KEY = "absentKey";
-  private static final String PRESENT_PROPERTY_KEY = "presentKey";
+  @NonNls private static final String ABSENT_PROPERTY_KEY = "absentKey";
+  @NonNls private static final String PRESENT_PROPERTY_KEY = "presentKey";
 
   protected AbstractPropertyReaderTestCase() {}
 
@@ -39,7 +39,7 @@ public abstract class AbstractPropertyReaderTestCase {
   /** Test cases for {@link PropertyReader#readProperty(String)}. */
   @Nested
   public final class ReadPropertyTest {
-    private static final String PRESENT_PROPERTY_VALUE = "presentValue";
+    @NonNls private static final String PRESENT_PROPERTY_VALUE = "presentValue";
 
     private PropertyReader propertyReader;
 

@@ -28,8 +28,8 @@ import org.triplea.swing.SwingAction;
 @Execution(ExecutionMode.SAME_THREAD)
 final class LobbyGameTableModelTest {
 
-  private static final String id0 = "id0";
-  private static final String id1 = "id1";
+  @NonNls private static final String id0 = "id0";
+  @NonNls private static final String id1 = "id1";
   private static final GameDescription gameDescription0;
   private static final GameDescription gameDescription1;
 

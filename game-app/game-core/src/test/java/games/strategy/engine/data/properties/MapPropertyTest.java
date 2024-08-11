@@ -12,8 +12,8 @@ import org.junit.jupiter.api.Test;
 final class MapPropertyTest {
   @Nested
   final class ValidateTest {
-    private static final String KEY_1 = "key1";
-    private static final String KEY_2 = "key2";
+    @NonNls private static final String KEY_1 = "key1";
+    @NonNls private static final String KEY_2 = "key2";
 
     private final MapProperty<Integer> mapProperty = newMapProperty(ImmutableMap.of(KEY_1, 42));
 

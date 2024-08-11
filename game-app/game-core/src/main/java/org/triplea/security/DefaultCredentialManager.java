@@ -30,10 +30,10 @@ import javax.crypto.spec.SecretKeySpec;
  * if it does not exist.
  */
 final class DefaultCredentialManager implements CredentialManager {
-  @VisibleForTesting
+  @VisibleForTesting @NonNls
   static final String PREFERENCE_KEY_MASTER_PASSWORD = "DEFAULT_CREDENTIAL_MANAGER_MASTER_PASSWORD";
 
-  private static final String CIPHER_ALGORITHM = "AES";
+  @NonNls private static final String CIPHER_ALGORITHM = "AES";
 
   private final char[] masterPassword;
 
