@@ -2842,8 +2842,9 @@
     <br>type of crystal grew and quickly spread around the world. The new
     <br>substance was named Tiberium.
 - mapName: Hearts of Iron 2-Europe
-  mapCategory: Experimental
-  url: https://github.com/triplea-maps/HOI2Europe
+  mapCategory: EXPERIMENTAL
+  url: https://github.com/triplea-maps/HOI2Europe/archive/master.zip
   img: https://github.com/triplea-maps/HOI2Europe/blob/master/HOI2Europe/preview.png
   version: 1
-  description: World War 2 in Europe starting in 1941
+  description: |
+    <br>World War 2 in Europe starting in 1941
