@@ -25,6 +25,7 @@ import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
 import lombok.experimental.UtilityClass;
+import org.jetbrains.annotations.NonNls;
 
 /**
  * Auto-generates unit abilities from deprecated unit options
@@ -34,7 +35,7 @@ import lombok.experimental.UtilityClass;
 @UtilityClass
 public class UnitAbilityFactory {
 
-  private static final String WILL_NOT_FIRE_AA_ABILITY_PREFIX = "willNotFireAa";
+  @NonNls private static final String WILL_NOT_FIRE_AA_ABILITY_PREFIX = "willNotFireAa";
 
   @RequiredArgsConstructor
   @FieldDefaults(makeFinal = true, level = AccessLevel.PRIVATE)
@@ -143,7 +144,7 @@ public class UnitAbilityFactory {
   private static void generatePerPlayerAndUnit(
       final Parameters parameters, final GamePlayer player, final UnitType unitType) {
     final UnitAttachment unitAttachment = unitType.getUnitAttachment();
-    if (unitAttachment.getIsAaForCombatOnly()) {
+    if (unitAttachment.isAaForCombatOnly()) {
       createAaUnitAbilities(parameters, player, unitType);
     }
     createUnitAbilities(parameters, player, unitType);
@@ -217,7 +218,7 @@ public class UnitAbilityFactory {
         ? unitAttachment.getIsSuicideOnAttack()
         : unitAttachment.getIsSuicideOnDefense()) {
       return CombatUnitAbility.Suicide.AFTER_FIRE;
-    } else if (unitAttachment.getIsSuicideOnHit()) {
+    } else if (unitAttachment.isSuicideOnHit()) {
       return CombatUnitAbility.Suicide.AFTER_HIT;
     } else {
       return CombatUnitAbility.Suicide.NONE;
@@ -370,8 +371,7 @@ public class UnitAbilityFactory {
   }
 
   private static Predicate<UnitType> isNotInfrastructure() {
-    return Predicate.not(
-        possibleTarget -> possibleTarget.getUnitAttachment().getIsInfrastructure());
+    return Predicate.not(possibleTarget -> possibleTarget.getUnitAttachment().isInfrastructure());
   }
 
   private static void createAntiFirstStrikeAbility(
@@ -402,7 +402,7 @@ public class UnitAbilityFactory {
 
   private static Collection<UnitType> getIsDestroyerUnitTypes(final UnitTypeList unitTypeList) {
     return unitTypeList.stream()
-        .filter(unitType -> unitType.getUnitAttachment().getIsDestroyer())
+        .filter(unitType -> unitType.getUnitAttachment().isDestroyer())
         .collect(Collectors.toList());
   }
 

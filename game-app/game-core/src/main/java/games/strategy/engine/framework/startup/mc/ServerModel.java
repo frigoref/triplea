@@ -53,6 +53,7 @@ import java.util.stream.Collectors;
 import javax.annotation.Nullable;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+import org.jetbrains.annotations.NonNls;
 import org.triplea.game.chat.ChatModel;
 import org.triplea.http.client.lobby.game.hosting.request.GameHostingClient;
 import org.triplea.http.client.lobby.game.hosting.request.GameHostingResponse;
@@ -72,6 +73,7 @@ public class ServerModel extends Observable implements IConnectionChangeListener
           "games.strategy.engine.framework.ui.ServerStartup.SERVER_REMOTE",
           IServerStartupRemote.class);
 
+  @NonNls
   static final String CHAT_NAME = "games.strategy.engine.framework.ui.ServerStartup.CHAT_NAME";
 
   private final GameObjectStreamFactory objectStreamFactory = new GameObjectStreamFactory(null);
@@ -348,7 +350,7 @@ public class ServerModel extends Observable implements IConnectionChangeListener
       playersEnabledListing.put(playerName, enabled);
       if (launchAction.shouldMinimizeExpensiveAiUse()) {
         // we do not want the host bot to actually play, so set to null if enabled,
-        // and set to weak ai if disabled
+        // and set to weak AI if disabled
         if (enabled) {
           playersToNodeListing.put(playerName, null);
         } else {
@@ -482,7 +484,7 @@ public class ServerModel extends Observable implements IConnectionChangeListener
     }
 
     final Map<String, PlayerTypes.Type> localPlayerMappings = new HashMap<>();
-    // local player default = humans (for bots = weak ai)
+    // local player default = humans (for bots = weak AI)
     final PlayerTypes.Type defaultLocalType = launchAction.getDefaultLocalPlayerType();
     for (final Map.Entry<String, String> entry : playersToNodeListing.entrySet()) {
       final String player = entry.getKey();

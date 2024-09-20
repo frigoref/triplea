@@ -46,6 +46,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
@@ -87,7 +88,7 @@ public class StrategicBombingRaidBattle extends AbstractBattle implements Battle
     }
     // we were having a problem with units that had been killed previously were still part of
     // battle's variables, so we
-    // double check that the stuff still exists here.
+    // double-check that the stuff still exists here.
     defendingUnits.retainAll(battleSite.getUnits());
     attackingUnits.retainAll(battleSite.getUnits());
     targets.keySet().removeIf(unit -> !battleSite.getUnits().contains(unit));
@@ -181,7 +182,7 @@ public class StrategicBombingRaidBattle extends AbstractBattle implements Battle
   public void fight(final IDelegateBridge bridge) {
     // remove units that may already be dead due to a previous event (like they died from a
     // strategic bombing raid,
-    // rocket attack, etc)
+    // rocket attack, etc.)
     removeUnitsThatNoLongerExist();
     // we were interrupted
     if (stack.isExecuting()) {
@@ -191,7 +192,7 @@ public class StrategicBombingRaidBattle extends AbstractBattle implements Battle
     }
     // We update Defending Units twice: first time when the battle is created, and second time
     // before the battle begins.
-    // The reason is because when the battle is created, there are no attacking units yet in it,
+    // The reason is when the battle is created, there are no attacking units yet in it,
     // meaning that targets
     // is empty. We need to update right as battle begins to know we have the full list of targets.
     updateDefendingUnits();
@@ -239,7 +240,7 @@ public class StrategicBombingRaidBattle extends AbstractBattle implements Battle
       // global1940 rules - each target type fires an AA shot against the planes bombing it
       steps.addAll(
           targets.entrySet().stream()
-              .filter(entry -> entry.getKey().getUnitAttachment().getIsAaForBombingThisUnitOnly())
+              .filter(entry -> entry.getKey().getUnitAttachment().isAaForBombingThisUnitOnly())
               .map(Entry::getValue)
               .map(FireAa::new)
               .collect(Collectors.toList()));
@@ -508,7 +509,8 @@ public class StrategicBombingRaidBattle extends AbstractBattle implements Battle
                             : SoundPath.CLIP_BATTLE_AA_MISS,
                         defender);
                   } else {
-                    String prefix = SoundPath.CLIP_BATTLE_X_PREFIX + currentTypeAa.toLowerCase();
+                    String prefix =
+                        SoundPath.CLIP_BATTLE_X_PREFIX + currentTypeAa.toLowerCase(Locale.ROOT);
                     sound.playSoundForAll(
                         prefix
                             + (dice.getHits() > 0
