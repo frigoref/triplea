@@ -176,16 +176,19 @@ public class UndoableMove extends AbstractUndoableMove {
           // or we are unloading transports that have moved in another turn
           || !CollectionUtils.intersection(other.units, this.unloaded).isEmpty()
           || !CollectionUtils.intersection(other.unloaded, this.unloaded).isEmpty()) {
-        dependencies.add(other);
-        other.dependents.add(this);
+        addDependency(other);
       }
     }
   }
 
-  // for use with airborne moving
-  public void addDependency(final UndoableMove undoableMove) {
-    dependencies.add(undoableMove);
-    undoableMove.dependents.add(this);
+  /**
+   * Adds dependencies to and from the new dependent move.
+   *
+   * @param newDependentMove move that supposed to be a new dependent for this move
+   */
+  public void addDependency(final UndoableMove newDependentMove) {
+    dependencies.add(newDependentMove);
+    newDependentMove.dependents.add(this);
   }
 
   public boolean wasTransportUnloaded(final Unit transport) {

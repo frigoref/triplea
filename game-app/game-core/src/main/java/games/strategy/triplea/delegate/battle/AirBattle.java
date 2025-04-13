@@ -133,11 +133,11 @@ public class AirBattle extends AbstractBattle {
     if (isOver) {
       return;
     }
-    final List<IExecutable> steps = getBattleExecutables(firstRun);
+    final List<IExecutable> battleExecutables = getBattleExecutables(firstRun);
     // add in the reverse order we create them
-    Collections.reverse(steps);
-    for (final IExecutable step : steps) {
-      stack.push(step);
+    Collections.reverse(battleExecutables);
+    for (final IExecutable executables : battleExecutables) {
+      stack.push(executables);
     }
   }
 
@@ -165,14 +165,14 @@ public class AirBattle extends AbstractBattle {
   }
 
   List<IExecutable> getBattleExecutables(final boolean firstRun) {
-    final List<IExecutable> steps = new ArrayList<>();
+    final List<IExecutable> executables = new ArrayList<>();
     if (shouldFightAirBattle()) {
       if (firstRun) {
-        steps.add(new InterceptorsLaunch());
+        executables.add(new InterceptorsLaunch());
       }
-      steps.add(new AttackersFire());
-      steps.add(new DefendersFire());
-      steps.add(
+      executables.add(new AttackersFire());
+      executables.add(new DefendersFire());
+      executables.add(
           new IExecutable() { // just calculates lost TUV and kills off any suicide units
             private static final long serialVersionUID = -5575569705493214941L;
 
@@ -219,7 +219,7 @@ public class AirBattle extends AbstractBattle {
             }
           });
     }
-    steps.add(
+    executables.add(
         new IExecutable() {
           private static final long serialVersionUID = 3148193405425861565L;
 
@@ -231,7 +231,7 @@ public class AirBattle extends AbstractBattle {
             makeBattle(bridge);
           }
         });
-    steps.add(
+    executables.add(
         new IExecutable() {
           private static final long serialVersionUID = 3148193405425861565L;
 
@@ -243,7 +243,7 @@ public class AirBattle extends AbstractBattle {
             end(bridge);
           }
         });
-    steps.add(
+    executables.add(
         new IExecutable() {
           private static final long serialVersionUID = -5408702756335356985L;
 
@@ -256,7 +256,7 @@ public class AirBattle extends AbstractBattle {
             }
           }
         });
-    steps.add(
+    executables.add(
         new IExecutable() {
           private static final long serialVersionUID = -7819137222487595113L;
 
@@ -278,7 +278,7 @@ public class AirBattle extends AbstractBattle {
             pushFightLoopOnStack(false);
           }
         };
-    steps.add(
+    executables.add(
         new IExecutable() {
           private static final long serialVersionUID = -4136481765101946944L;
 
@@ -300,25 +300,25 @@ public class AirBattle extends AbstractBattle {
             }
           }
         });
-    return steps;
+    return executables;
   }
 
   private List<String> determineStepStrings(final boolean showFirstRun) {
-    final List<String> steps = new ArrayList<>();
+    final List<String> newStepStrings = new ArrayList<>();
     if (showFirstRun) {
-      steps.add(AIR_BATTLE);
-      steps.add(INTERCEPTORS_LAUNCH);
+      newStepStrings.add(AIR_BATTLE);
+      newStepStrings.add(INTERCEPTORS_LAUNCH);
     }
-    steps.add(ATTACKERS_FIRE);
-    steps.add(DEFENDERS_FIRE);
+    newStepStrings.add(ATTACKERS_FIRE);
+    newStepStrings.add(DEFENDERS_FIRE);
     if (canAttackerRetreat()) {
-      steps.add(ATTACKERS_WITHDRAW);
+      newStepStrings.add(ATTACKERS_WITHDRAW);
     }
     if (canDefenderRetreat()) {
-      steps.add(DEFENDERS_WITHDRAW);
+      newStepStrings.add(DEFENDERS_WITHDRAW);
     }
     // steps.add(BOMBERS_TO_TARGETS);
-    return steps;
+    return newStepStrings;
   }
 
   private static void recordUnitsWereInAirBattle(
@@ -528,7 +528,7 @@ public class AirBattle extends AbstractBattle {
       // remove them from this
       // battle, because after we remove from this battle we are no longer blocking any battles)
       final Collection<IBattle> dependentBattles = battleTracker.getBlocked(AirBattle.this);
-      removeFromDependents(retreating, bridge, dependentBattles, true);
+      removeFromDependentBattles(retreating, bridge, dependentBattles, true);
     }
     final String transcriptText =
         MyFormatter.unitsToText(retreating) + (defender ? " grounded" : " retreated");
@@ -904,7 +904,7 @@ public class AirBattle extends AbstractBattle {
     removeUnitsHistoryChange.perform(bridge);
 
     final Collection<IBattle> dependentBattles = battleTracker.getBlocked(AirBattle.this);
-    removeFromDependents(killed, bridge, dependentBattles, false);
+    removeFromDependentBattles(killed, bridge, dependentBattles, false);
   }
 
   private static void notifyCasualties(
@@ -942,16 +942,6 @@ public class AirBattle extends AbstractBattle {
     bridge.leaveDelegateExecution();
     Interruptibles.join(t);
     bridge.enterDelegateExecution();
-  }
-
-  private static void removeFromDependents(
-      final Collection<Unit> units,
-      final IDelegateBridge bridge,
-      final Collection<IBattle> dependents,
-      final boolean withdrawn) {
-    for (final IBattle dependent : dependents) {
-      dependent.unitsLostInPrecedingBattle(units, bridge, withdrawn);
-    }
   }
 
   @Override

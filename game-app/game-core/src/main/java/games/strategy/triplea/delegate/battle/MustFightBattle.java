@@ -501,18 +501,18 @@ public class MustFightBattle extends DependentBattle
   @Override
   public void clearWaitingToDieAndDamagedChangesInto(
       final IDelegateBridge bridge, final BattleState.Side... sides) {
+    Map<Boolean, List<Unit>> mapKilledOwnedByAttacker =
+        killedDuringCurrentRound.stream()
+            .collect(Collectors.partitioningBy(Matches.unitIsOwnedBy(attacker)::test));
     for (final Side side : sides) {
       if (side == OFFENSE) {
-        Collection<Unit> killed =
-            CollectionUtils.getMatches(killedDuringCurrentRound, Matches.unitIsOwnedBy(attacker));
-        damagedChangeInto(attacker, attackingUnits, killed, bridge, side);
+        damagedChangeInto(
+            attacker, attackingUnits, mapKilledOwnedByAttacker.get(Boolean.TRUE), bridge, side);
         removeUnits(attackingWaitingToDie, bridge, battleSite, side);
         attackingWaitingToDie.clear();
       } else {
-        Collection<Unit> killed =
-            CollectionUtils.getMatches(
-                killedDuringCurrentRound, Matches.unitIsOwnedBy(attacker).negate());
-        damagedChangeInto(defender, defendingUnits, killed, bridge, side);
+        damagedChangeInto(
+            defender, defendingUnits, mapKilledOwnedByAttacker.get(Boolean.TRUE), bridge, side);
         removeUnits(defendingWaitingToDie, bridge, battleSite, side);
         defendingWaitingToDie.clear();
       }
@@ -593,7 +593,7 @@ public class MustFightBattle extends DependentBattle
     final Collection<IBattle> dependentBattles = battleTracker.getBlocked(this);
     if (!dependentBattles.isEmpty()) {
       // check dependent battles to see if there are dependent units there that need to die
-      removeFromDependentBattles(killedUnits, bridge, dependentBattles);
+      removeFromDependentBattles(killedUnits, bridge, dependentBattles, false);
     }
 
     // Remember all these killed units to build after-battle statistics
@@ -607,15 +607,6 @@ public class MustFightBattle extends DependentBattle
       attackingUnits.addAll(transformedUnits);
       attackingUnits.removeAll(killedUnits);
       attackingWaitingToDie.removeAll(killedUnits);
-    }
-  }
-
-  private static void removeFromDependentBattles(
-      final Collection<Unit> units,
-      final IDelegateBridge bridge,
-      final Collection<IBattle> dependents) {
-    for (final IBattle dependent : dependents) {
-      dependent.unitsLostInPrecedingBattle(units, bridge, false);
     }
   }
 

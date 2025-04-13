@@ -131,9 +131,7 @@ abstract class AbstractBattle implements IBattle {
 
   /** Figure out what units a transport is transporting and has to unloaded. */
   public Collection<Unit> getTransportDependents(final Collection<Unit> targets) {
-    if (headless) {
-      return List.of();
-    } else if (targets.stream().noneMatch(Matches.unitCanTransport())) {
+    if (headless || targets.stream().noneMatch(Matches.unitCanTransport())) {
       return List.of();
     }
     return targets.stream()
@@ -334,5 +332,15 @@ abstract class AbstractBattle implements IBattle {
       return new WeakAi(player.getName());
     }
     return bridge.getRemotePlayer(player);
+  }
+
+  protected static void removeFromDependentBattles(
+      final Collection<Unit> units,
+      final IDelegateBridge bridge,
+      final Collection<IBattle> dependents,
+      final boolean withdrawn) {
+    for (final IBattle dependent : dependents) {
+      dependent.unitsLostInPrecedingBattle(units, bridge, withdrawn);
+    }
   }
 }
