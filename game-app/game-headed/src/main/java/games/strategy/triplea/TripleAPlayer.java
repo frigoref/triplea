@@ -118,17 +118,17 @@ public class TripleAPlayer extends AbstractBasePlayer {
   }
 
   @Override
-  public void start(final String name) {
+  public void start(final String stepName) {
     // must call super.start
-    super.start(name);
+    super.start(stepName);
     try {
-      startImpl(name);
+      startImpl(stepName);
     } catch (GameOverException e) {
       // Return cleanly.
     }
   }
 
-  private void startImpl(final String name) {
+  private void startImpl(final String stepName) {
     if (getPlayerBridge().isGameOver()) {
       return;
     }
@@ -137,7 +137,8 @@ public class TripleAPlayer extends AbstractBasePlayer {
       // should be doing the error handling, so just return.
       return;
     }
-    // TODO: parsing which UI thing we should run based on the string name of a possibly extended
+    // TODO: parsing which UI thing we should run based on the string stepName of a possibly
+    // extended
     // delegate
     // class seems like a bad way of doing this whole method. however i can't think of anything
     // better right now.
@@ -151,30 +152,30 @@ public class TripleAPlayer extends AbstractBasePlayer {
     ui.requiredTurnSeries(this.getGamePlayer());
     enableEditModeMenu();
     boolean badStep = false;
-    if (GameStep.isTechStep(name)) {
+    if (GameStep.isTechStep(stepName)) {
       tech();
-    } else if (GameStep.isPurchaseOrBidStep(name)) {
+    } else if (GameStep.isPurchaseOrBidStep(stepName)) {
       purchase(GameStepPropertiesHelper.isBid(getGameData()), false);
       if (!GameStepPropertiesHelper.isBid(getGameData())) {
         ui.waitForMoveForumPoster(this.getGamePlayer(), getPlayerBridge());
         // TODO only do forum post if there is a combat
       }
-    } else if (GameStep.isMoveStep(name)) {
+    } else if (GameStep.isMoveStep(stepName)) {
       final boolean nonCombat = GameStepPropertiesHelper.isNonCombatMove(getGameData(), false);
-      move(nonCombat, name);
+      move(nonCombat, stepName);
       if (!nonCombat) {
         ui.waitForMoveForumPoster(this.getGamePlayer(), getPlayerBridge());
         // TODO only do forum post if there is a combat
       }
-    } else if (GameStep.isBattleStep(name)) {
+    } else if (GameStep.isBattleStep(stepName)) {
       battle();
-    } else if (GameStep.isPlaceStep(name)) {
+    } else if (GameStep.isPlaceStep(stepName)) {
       place();
-    } else if (GameStep.isPoliticsStep(name)) {
+    } else if (GameStep.isPoliticsStep(stepName)) {
       politics(true);
-    } else if (GameStep.isUserActionsStep(name)) {
+    } else if (GameStep.isUserActionsStep(stepName)) {
       userActions(true);
-    } else if (GameStep.isEndTurnStep(name)) {
+    } else if (GameStep.isEndTurnStep(stepName)) {
       endTurn();
       // reset our sounds
       soundPlayedAlreadyCombatMove = false;
@@ -185,11 +186,11 @@ public class TripleAPlayer extends AbstractBasePlayer {
       soundPlayedAlreadyEndTurn = false;
       soundPlayedAlreadyPlacement = false;
     } else {
-      badStep = !GameStep.isTechActivationStep(name);
+      badStep = !GameStep.isTechActivationStep(stepName);
     }
     disableEditModeMenu();
     if (badStep) {
-      throw new IllegalArgumentException("Unrecognized step name: " + name);
+      throw new IllegalArgumentException("Unrecognized step name: " + stepName);
     }
   }
 

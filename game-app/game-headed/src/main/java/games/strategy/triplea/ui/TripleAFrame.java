@@ -1679,8 +1679,9 @@ public final class TripleAFrame extends JFrame implements QuitHandler {
         () ->
             SwingAction.invokeAndWait(
                 () -> {
-                  final Boolean play = requiredTurnSeries.get(player);
-                  if (play != null && play) {
+                  final Boolean play =
+                      Optional.ofNullable(requiredTurnSeries.get(player)).orElse(Boolean.FALSE);
+                  if (play) {
                     getUiContext()
                         .getClipPlayer()
                         .play(SoundPath.CLIP_REQUIRED_YOUR_TURN_SERIES, player);
