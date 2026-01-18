@@ -22,13 +22,13 @@ import games.strategy.triplea.settings.ClientSetting;
 import games.strategy.triplea.ui.TripleAFrame;
 import games.strategy.triplea.ui.display.TripleADisplay;
 import java.awt.Component;
-import java.awt.Frame;
 import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.Collection;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.CountDownLatch;
 import javax.annotation.Nullable;
 import javax.swing.JOptionPane;
 import javax.swing.SwingUtilities;
@@ -88,24 +88,35 @@ public class HeadedLaunchAction implements LaunchAction {
     final TripleAFrame frame =
         TripleAFrame.create(game, localPlayers, chat, HeadedGameRunner::clientLeftGame);
 
+    CountDownLatch latchForVisibleFrame = new CountDownLatch(1);
     SwingUtilities.invokeLater(
         () -> {
-          LookAndFeelSwingFrameListener.register(frame);
-          frame.setSize(700, 400);
-          frame.setExtendedState(Frame.MAXIMIZED_BOTH);
-          frame.setVisible(true);
-          frame.toFront();
+          try {
+            LookAndFeelSwingFrameListener.register(frame);
+            frame.setVisible(true);
+            frame.toFront();
+          } finally {
+            latchForVisibleFrame.countDown();
+          }
         });
 
     frame.getUiContext().getClipPlayer().play(SoundPath.CLIP_GAME_START);
     for (final Player player : players) {
-      if (player instanceof TripleAPlayer) {
-        ((TripleAPlayer) player).setFrame(frame);
+      if (player instanceof TripleAPlayer tripleAPlayer) {
+        tripleAPlayer.setFrame(frame);
       }
     }
     game.setDisplay(new TripleADisplay(frame));
     game.setSoundChannel(
         new DefaultSoundChannel(localPlayers, frame.getUiContext().getClipPlayer()));
+
+    try {
+      latchForVisibleFrame.await();
+    } catch (InterruptedException e) {
+      // problem for above frame.setVisible
+      Thread.currentThread().interrupt();
+      throw new IllegalStateException(e);
+    }
   }
 
   @Override

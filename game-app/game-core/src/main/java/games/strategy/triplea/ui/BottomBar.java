@@ -33,6 +33,7 @@ import javax.swing.SwingConstants;
 import javax.swing.SwingUtilities;
 import javax.swing.border.Border;
 import javax.swing.border.EtchedBorder;
+import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.triplea.java.ObjectUtils;
 import org.triplea.java.collections.IntegerMap;
@@ -49,7 +50,7 @@ public class BottomBar extends JPanel implements TerritoryListener, ZoomMapListe
 
   private final ResourceBar resourceBar;
   private final JPanel territoryInfo = new JPanel();
-  private @Nullable Territory currentTerritory;
+  @Getter private @Nullable Territory currentTerritory;
 
   private final JLabel statusMessage = new JLabel();
 

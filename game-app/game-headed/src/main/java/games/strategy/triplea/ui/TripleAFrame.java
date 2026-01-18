@@ -272,6 +272,9 @@ public final class TripleAFrame extends JFrame implements QuitHandler {
       @Nullable final Chat chat,
       final Runnable clientLeftGame) {
     super("TripleA - " + game.getData().getGameName());
+
+    setSize(700, 400);
+    setExtendedState(Frame.MAXIMIZED_BOTH);
     setDefaultCloseOperation(DISPOSE_ON_CLOSE);
 
     this.clientLeftGame = clientLeftGame;
@@ -1791,55 +1794,50 @@ public final class TripleAFrame extends JFrame implements QuitHandler {
     setWidgetActivation();
     final GameData clonedGameData;
     try (GameData.Unlocker ignored = data.acquireWriteLock()) {
-      // we want to use a clone of the data, so we can make changes to it as we walk up and down the
-      // history
+      // we want to use a clone of the data, so we can make changes to it as we walk up and down
+      // the history
       final var cloneOptions = GameDataManager.Options.builder().withHistory(true).build();
       clonedGameData = GameDataUtils.cloneGameData(data, cloneOptions).orElse(null);
       if (clonedGameData == null) {
         return;
       }
     }
-    clonedGameData.removeDataChangeListener(dataChangeListener);
+    updatePanelsGameData(clonedGameData);
     if (historySyncher != null) {
       throw new IllegalStateException("Two history synchers?");
     }
     historySyncher = new HistorySynchronizer(clonedGameData, game);
-    clonedGameData.addDataChangeListener(dataChangeListener);
-    statsPanel.setGameData(clonedGameData);
-    if (!TechAdvance.getTechAdvances(clonedGameData.getTechnologyFrontier(), null).isEmpty()) {
-      technologyPanel.setGameData(clonedGameData);
-    }
-    economyPanel.setGameData(clonedGameData);
-    if (objectivePanel != null) {
-      objectivePanel.setGameData(clonedGameData);
-    }
-    territoryDetailPanel.setGameData(clonedGameData);
-    mapPanel.setGameData(clonedGameData);
-    SwingUtilities.invokeLater(
-        () -> {
-          final HistoryDetailsPanel historyDetailPanel = getHistoryDetailsPanel(clonedGameData);
-          // create history tree context menu
-          final JSplitPane historyComponentSplitPane = new JSplitPane();
-          historyComponentSplitPane.setOneTouchExpandable(true);
-          historyComponentSplitPane.setContinuousLayout(true);
-          historyComponentSplitPane.setDividerSize(8);
-          historyComponentSplitPane.setLeftComponent(historyPanel);
-          historyComponentSplitPane.setRightComponent(gameCenterPanel);
-          historyComponentSplitPane.setDividerLocation(150);
-          final JPanel historyComponent =
-              new JPanelBuilder()
-                  .borderLayout()
-                  .addCenter(historyComponentSplitPane)
-                  .addSouth(bottomBar)
-                  .build();
 
-          tabsPanel.removeAll();
-          addTabs(historyDetailPanel);
-          actionButtonsPanel.getCurrent().ifPresent(actionPanel -> actionPanel.setActive(false));
-          getContentPane().removeAll();
-          getContentPane().add(historyComponent, BorderLayout.CENTER);
-          validate();
-        });
+    Interruptibles.await(
+        () ->
+            SwingAction.invokeAndWait(
+                () -> {
+                  final HistoryDetailsPanel historyDetailPanel =
+                      getHistoryDetailsPanel(clonedGameData);
+                  // create history tree context menu
+                  final JSplitPane historyComponentSplitPane = new JSplitPane();
+                  historyComponentSplitPane.setOneTouchExpandable(true);
+                  historyComponentSplitPane.setContinuousLayout(true);
+                  historyComponentSplitPane.setDividerSize(8);
+                  historyComponentSplitPane.setLeftComponent(historyPanel);
+                  historyComponentSplitPane.setRightComponent(gameCenterPanel);
+                  historyComponentSplitPane.setDividerLocation(150);
+                  final JPanel historyComponent =
+                      new JPanelBuilder()
+                          .borderLayout()
+                          .addCenter(historyComponentSplitPane)
+                          .addSouth(bottomBar)
+                          .build();
+
+                  tabsPanel.removeAll();
+                  addTabs(historyDetailPanel);
+                  actionButtonsPanel
+                      .getCurrent()
+                      .ifPresent(actionPanel -> actionPanel.setActive(false));
+                  getContentPane().removeAll();
+                  getContentPane().add(historyComponent, BorderLayout.CENTER);
+                  validate();
+                }));
   }
 
   @Nonnull
@@ -1979,18 +1977,7 @@ public final class TripleAFrame extends JFrame implements QuitHandler {
               historySyncher = null;
             }
             historyPanel = null;
-            mapPanel.getData().removeDataChangeListener(dataChangeListener);
-            if (!TechAdvance.getTechAdvances(data.getTechnologyFrontier(), null).isEmpty()) {
-              technologyPanel.setGameData(data);
-            }
-            statsPanel.setGameData(data);
-            economyPanel.setGameData(data);
-            if (objectivePanel != null) {
-              objectivePanel.setGameData(data);
-            }
-            territoryDetailPanel.setGameData(data);
-            mapPanel.setGameData(data);
-            data.addDataChangeListener(dataChangeListener);
+            updatePanelsGameData(data);
             tabsPanel.removeAll();
           }
           setWidgetActivation();
@@ -2006,6 +1993,28 @@ public final class TripleAFrame extends JFrame implements QuitHandler {
           requestWindowFocus();
         });
     mapPanel.setRoute(null);
+  }
+
+  private void updatePanelsGameData(final GameData newGameData) {
+    mapPanel.setGameData(newGameData);
+    // update bottomBar from new game data (here its territory)
+    Territory currentTerritoryBottomBar = bottomBar.getCurrentTerritory();
+    if (currentTerritoryBottomBar != null) {
+      Territory newGameDataTerritory =
+          GameDataUtils.translateIntoOtherGameData(currentTerritoryBottomBar, newGameData);
+      bottomBar.setTerritory(newGameDataTerritory);
+    } else {
+      bottomBar.setTerritory(null);
+    }
+    if (!TechAdvance.getTechAdvances(newGameData.getTechnologyFrontier(), null).isEmpty()) {
+      technologyPanel.setGameData(newGameData);
+    }
+    statsPanel.setGameData(newGameData);
+    economyPanel.setGameData(newGameData);
+    if (objectivePanel != null) {
+      objectivePanel.setGameData(newGameData);
+    }
+    territoryDetailPanel.setGameData(newGameData);
   }
 
   private void setWidgetActivation() {
